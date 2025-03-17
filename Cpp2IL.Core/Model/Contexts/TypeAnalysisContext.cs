@@ -96,11 +96,11 @@ public class TypeAnalysisContext : HasCustomAttributesAndName, ITypeInfoProvider
     {
         get
         {
-            if (Definition is { RawBaseType: not null })
-                return Definition.RawBaseType.Type;
-
             if (AppContext.SystemTypes.TryGetIl2CppTypeEnum(this, out var value))
                 return value;
+            
+            if (Definition is { RawType: {} rawType })
+                return rawType.Type;
 
             if (IsEnumType)
                 return Il2CppTypeEnum.IL2CPP_TYPE_ENUM;
