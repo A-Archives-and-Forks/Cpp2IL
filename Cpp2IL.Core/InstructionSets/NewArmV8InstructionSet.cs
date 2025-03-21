@@ -15,6 +15,9 @@ namespace Cpp2IL.Core.InstructionSets;
 
 public class NewArmV8InstructionSet : Cpp2IlInstructionSet
 {
+    [ThreadStatic]
+    private static Dictionary<Arm64Register, ulong> adrpOffsets = new();
+    
     public override Memory<byte> GetRawBytesForMethod(MethodAnalysisContext context, bool isAttributeGenerator)
     {
         if (context is not ConcreteGenericMethodAnalysisContext)
@@ -47,10 +50,17 @@ public class NewArmV8InstructionSet : Cpp2IlInstructionSet
 
         var builder = new IsilBuilder();
 
+        if (adrpOffsets == null!) //Null suppress because thread static weirdness
+            adrpOffsets = new();
+        
+        adrpOffsets.Clear();
+
         foreach (var instruction in insns)
         {
             ConvertInstructionStatement(instruction, builder, context);
         }
+        
+        adrpOffsets.Clear();
 
         builder.FixJumps();
 
@@ -68,8 +78,13 @@ public class NewArmV8InstructionSet : Cpp2IlInstructionSet
             case Arm64Mnemonic.LDR:
             case Arm64Mnemonic.LDRB:
                 //Load and move are (dest, src)
+                
                 if (instruction.MemIsPreIndexed) //  such as  X8, [X19,#0x30]! 
                 {
+                    //Regardless of anything else, we're trashing any possible ADRP offsets in the dest here, so let's clear that
+                    if(instruction.Op0Kind == Arm64OperandKind.Register)
+                        adrpOffsets.Remove(instruction.Op0Reg);
+                    
                     var operate = ConvertOperand(instruction, 1);
                     if (operate.Data is IsilMemoryOperand operand)
                     {
@@ -84,17 +99,42 @@ public class NewArmV8InstructionSet : Cpp2IlInstructionSet
                     }
                 }
 
+                if (instruction.Op1Kind == Arm64OperandKind.Memory && adrpOffsets.TryGetValue(instruction.MemBase, out var page) && instruction.MemOffset != 0 && instruction.MemAddendReg == Arm64Register.INVALID)
+                {
+                    //Maybe this is a bit hacky? But I really don't want to write paged load handling into ISIL itself, it's an Arm64 quirk
+                    //LDR X0, [X1, #0x1000], where X1 was previously loaded with a page address via an ADRP instruction
+                    //We just return the final address, it makes ISIL happier.
+                    //TODO check if this is correct
+                    var offset = instruction.MemOffset + (long) page;
+                    
+                    //We're also trashing any possible ADRP offsets in the dest here, so let's clear that now we've possibly grabbed the value if we need it (it's common to store the page and final address in the same register)
+                    if(instruction.Op0Kind == Arm64OperandKind.Register)
+                        adrpOffsets.Remove(instruction.Op0Reg);
+                    
+                    builder.Move(instruction.Address, ConvertOperand(instruction, 0), InstructionSetIndependentOperand.MakeMemory(new(offset)));
+                    break;
+                }
+
+                //And again here we're trashing any possible ADRP offsets in the dest here, so let's clear that
+                if(instruction.Op0Kind == Arm64OperandKind.Register)
+                    adrpOffsets.Remove(instruction.Op0Reg);
+                
                 builder.Move(instruction.Address, ConvertOperand(instruction, 0), ConvertOperand(instruction, 1));
                 break;
             case Arm64Mnemonic.MOVN:
             {
                 // dest = ~src
+                
+                //See above re: ADRP offsets
+                if(instruction.Op0Kind == Arm64OperandKind.Register)
+                    adrpOffsets.Remove(instruction.Op0Reg);
+                
                 var temp = InstructionSetIndependentOperand.MakeRegister("TEMP");
                 builder.Move(instruction.Address, temp, ConvertOperand(instruction, 1));
                 builder.Not(instruction.Address, temp);
                 builder.Move(instruction.Address, ConvertOperand(instruction, 0), temp);
-            }
                 break;
+            }
             case Arm64Mnemonic.STR:
             case Arm64Mnemonic.STUR: // unscaled
             case Arm64Mnemonic.STRB:
@@ -131,7 +171,8 @@ public class NewArmV8InstructionSet : Cpp2IlInstructionSet
                 break;
             case Arm64Mnemonic.ADRP:
                 //Just handle as a move
-                builder.Move(instruction.Address, ConvertOperand(instruction, 0), ConvertOperand(instruction, 1));
+                // builder.Move(instruction.Address, ConvertOperand(instruction, 0), ConvertOperand(instruction, 1));
+                adrpOffsets[instruction.Op0Reg] = (ulong)instruction.Op1Imm;
                 break;
             case Arm64Mnemonic.LDP when instruction.Op2Kind == Arm64OperandKind.Memory:
                 //LDP (dest1, dest2, [mem]) - basically just treat as two loads, with the second offset by the length of the first
