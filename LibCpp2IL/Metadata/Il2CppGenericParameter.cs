@@ -1,5 +1,5 @@
-using System;
 using System.Linq;
+using System.Reflection;
 using LibCpp2IL.BinaryStructures;
 
 namespace LibCpp2IL.Metadata;
@@ -12,6 +12,8 @@ public class Il2CppGenericParameter : ReadableClass
     public short constraintsCount;
     public ushort genericParameterIndexInOwner;
     public ushort flags;
+
+    public GenericParameterAttributes Attributes => (GenericParameterAttributes)flags;
 
     public string? Name => LibCpp2IlMain.TheMetadata?.GetStringFromIndex(nameIndex);
 
@@ -27,9 +29,7 @@ public class Il2CppGenericParameter : ReadableClass
 
     public Il2CppGenericContainer Owner => LibCpp2IlMain.TheMetadata!.genericContainers[ownerIndex];
 
-    private bool IsOwnedByMethod => Owner.isGenericMethod != 0;
-
-    public Il2CppTypeEnum Type => IsOwnedByMethod ? Il2CppTypeEnum.IL2CPP_TYPE_MVAR : Il2CppTypeEnum.IL2CPP_TYPE_VAR;
+    public Il2CppTypeEnum Type => Owner.isGenericMethod ? Il2CppTypeEnum.IL2CPP_TYPE_MVAR : Il2CppTypeEnum.IL2CPP_TYPE_VAR;
 
     public override void Read(ClassReadingBinaryReader reader)
     {

@@ -11,7 +11,7 @@ public class Il2CppGenericContainer : ReadableClass
     public int genericParameterCount;
 
     /* If true, we're a generic method, otherwise a generic type definition. */
-    public int isGenericMethod;
+    public bool isGenericMethod; // actually an int, but we treat it as a bool
 
     /* Our type parameters. */
     public int genericParameterStart;
@@ -33,11 +33,29 @@ public class Il2CppGenericContainer : ReadableClass
         }
     }
 
+    public Il2CppTypeDefinition? TypeOwner
+    {
+        get
+        {
+            return isGenericMethod ? null : LibCpp2IlMain.TheMetadata!.typeDefs[ownerIndex];
+        }
+    }
+
+    public Il2CppMethodDefinition? MethodOwner
+    {
+        get
+        {
+            return isGenericMethod ? LibCpp2IlMain.TheMetadata!.methodDefs[ownerIndex] : null;
+        }
+    }
+
+    public Il2CppTypeDefinition? DeclaringType => TypeOwner ?? MethodOwner?.DeclaringType;
+
     public override void Read(ClassReadingBinaryReader reader)
     {
         ownerIndex = reader.ReadInt32();
         genericParameterCount = reader.ReadInt32();
-        isGenericMethod = reader.ReadInt32();
+        isGenericMethod = reader.ReadInt32() != 0;
         genericParameterStart = reader.ReadInt32();
     }
 }
