@@ -393,8 +393,16 @@ public abstract class Il2CppBinary(MemoryStream input) : ClassReadingBinaryReade
                 if (ptr > 0)
                 {
                     var offsetOffset = (ulong)MapVirtualAddressToRaw(ptr) + 4ul * (ulong)fieldIndexInType;
-                    Position = (long)offsetOffset;
-                    offset = (int)ReadPrimitive(typeof(int))!; //Read 4 bytes. We can't just use ReadInt32 because that breaks e.g. Wasm. Hoping the JIT can optimize this as it knows the type.
+                    GetLockOrThrow();
+                    try
+                    {
+                        Position = (long)offsetOffset;
+                        offset = (int)ReadPrimitive(typeof(int))!; //Read 4 bytes. We can't just use ReadInt32 because that breaks e.g. Wasm. Hoping the JIT can optimize this as it knows the type.
+                    }
+                    finally
+                    {
+                        ReleaseLock();
+                    }
                 }
             }
             else
