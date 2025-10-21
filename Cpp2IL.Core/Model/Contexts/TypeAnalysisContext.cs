@@ -79,7 +79,7 @@ public class TypeAnalysisContext : HasGenericParameters, ITypeInfoProvider, ICSh
         set => OverrideAttributes = value;
     }
 
-    public virtual TypeAnalysisContext? DefaultBaseType => Definition == null ? null : DeclaringAssembly.ResolveIl2CppType(Definition.RawBaseType);
+    public virtual TypeAnalysisContext? DefaultBaseType => Definition == null || DefaultAttributes.HasFlag(TypeAttributes.Interface) ? null : DeclaringAssembly.ResolveIl2CppType(Definition.RawBaseType);
 
     public TypeAnalysisContext? OverrideBaseType { get; set; }
 
