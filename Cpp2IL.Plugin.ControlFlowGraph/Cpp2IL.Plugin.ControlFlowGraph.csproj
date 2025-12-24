@@ -16,7 +16,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="DotNetGraph" Version="3.2.0" IncludeAssets="All" />
+		<PackageReference Include="DotNetGraph" Version="3.3.0" IncludeAssets="All" />
 	</ItemGroup>
 
 </Project>

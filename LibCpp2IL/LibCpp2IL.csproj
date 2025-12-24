@@ -34,12 +34,12 @@
         <PackageReference Include="PolySharp" Version="1.15.0" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
     </ItemGroup>
 
-    <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-        <PackageReference Include="System.Memory" Version="4.6.0" />
-    </ItemGroup>
-
     <ItemGroup>
         <ProjectReference Include="..\WasmDisassembler\WasmDisassembler.csproj" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+      <PackageReference Include="System.Memory" Version="4.6.3" />
     </ItemGroup>
 
 </Project>
