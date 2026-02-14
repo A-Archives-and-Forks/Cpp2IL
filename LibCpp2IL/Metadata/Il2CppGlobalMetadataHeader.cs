@@ -25,6 +25,8 @@ public class Il2CppGlobalMetadataHeader : ReadableClass
     public Il2CppGlobalMetadataSectionHeader vtableMethods; // EncodedMethodIndex
     public Il2CppGlobalMetadataSectionHeader interfaceOffsets; // Il2CppInterfaceOffsetPair
     public Il2CppGlobalMetadataSectionHeader typeDefinitions; // Il2CppTypeDefinition
+    
+    [Version(Min = 104f)] public Il2CppGlobalMetadataSectionHeader typeInlineArrays; // Il2CppInlineArrayLength
 
     [Version(Max = 24.15f)] public Il2CppGlobalMetadataSectionHeader rgctxEntries; // Il2CppRGCTXDefinition
 
@@ -79,6 +81,9 @@ public class Il2CppGlobalMetadataHeader : ReadableClass
         vtableMethods = reader.ReadReadableHereNoLock<Il2CppGlobalMetadataSectionHeader>();
         interfaceOffsets = reader.ReadReadableHereNoLock<Il2CppGlobalMetadataSectionHeader>();
         typeDefinitions = reader.ReadReadableHereNoLock<Il2CppGlobalMetadataSectionHeader>();
+        
+        if (IsAtLeast(104f))
+            typeInlineArrays = reader.ReadReadableHereNoLock<Il2CppGlobalMetadataSectionHeader>();
 
         if (IsAtMost(24.15f))
             rgctxEntries = reader.ReadReadableHereNoLock<Il2CppGlobalMetadataSectionHeader>();

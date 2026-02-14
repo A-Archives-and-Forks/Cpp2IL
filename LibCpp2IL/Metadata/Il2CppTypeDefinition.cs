@@ -31,12 +31,12 @@ public class Il2CppTypeDefinition : ReadableClass
 
     public int FirstFieldIdx;
     public int FirstMethodIdx;
-    public int FirstEventId;
-    public int FirstPropertyId;
-    public int NestedTypesStart;
+    public Il2CppVariableWidthIndex<Il2CppEventDefinition> FirstEventId;
+    public Il2CppVariableWidthIndex<Il2CppPropertyDefinition> FirstPropertyId;
+    public Il2CppVariableWidthIndex<Il2CppNestedTypeIndex> NestedTypesStart;
     public int InterfacesStart;
     public int VtableStart;
-    public int InterfaceOffsetsStart;
+    public Il2CppVariableWidthIndex<Il2CppInterfaceOffset> InterfaceOffsetsStart;
 
     public ushort MethodCount;
     public ushort PropertyCount;
@@ -95,9 +95,9 @@ public class Il2CppTypeDefinition : ReadableClass
     {
         get
         {
-            if (InterfaceOffsetsStart < 0) return [];
+            if (InterfaceOffsetsStart.IsNull) return [];
 
-            return LibCpp2IlMain.TheMetadata!.interfaceOffsets.SubArray(InterfaceOffsetsStart, InterfaceOffsetsCount);
+            return LibCpp2IlMain.TheMetadata!.GetInterfaceOffsetsFromIndexAndCount(InterfaceOffsetsStart, InterfaceOffsetsCount);
         }
     }
 
@@ -305,34 +305,39 @@ public class Il2CppTypeDefinition : ReadableClass
             if (LibCpp2IlMain.TheMetadata == null)
                 return null;
 
-            if (FirstPropertyId < 0 || PropertyCount == 0)
+            if (FirstPropertyId.IsNull || PropertyCount == 0)
                 return [];
 
-            var ret = new Il2CppPropertyDefinition[PropertyCount];
+            var ret = LibCpp2IlMain.TheMetadata.GetPropertyDefinitionsFromIndexAndCount(FirstPropertyId, PropertyCount);
+            
+            foreach (var definition in ret) 
+                definition.DeclaringType = this;
 
-            Array.Copy(LibCpp2IlMain.TheMetadata.propertyDefs, FirstPropertyId, ret, 0, PropertyCount);
-
-            return ret.Select(p =>
-            {
-                p.DeclaringType = this;
-                return p;
-            }).ToArray();
+            return ret;
         }
     }
 
-    public Il2CppEventDefinition[]? Events => LibCpp2IlMain.TheMetadata == null
-        ? null
-        : LibCpp2IlMain.TheMetadata.eventDefs.Skip(FirstEventId).Take(EventCount).Select(e =>
+    public Il2CppEventDefinition[]? Events
+    {
+        get
         {
-            e.DeclaringType = this;
-            return e;
-        }).ToArray();
+            if (LibCpp2IlMain.TheMetadata == null)
+                return null;
+
+            if (FirstEventId.IsNull || EventCount == 0)
+                return [];
+
+            var ret = LibCpp2IlMain.TheMetadata.GetEventDefinitionsFromIndexAndCount(FirstEventId, EventCount);
+            foreach (var def in ret) 
+                def.DeclaringType = this;
+            
+            return ret;
+        }
+    }
 
     public Il2CppTypeDefinition[]? NestedTypes => LibCpp2IlMain.TheMetadata == null 
         ? null 
-        : LibCpp2IlMain.TheMetadata.nestedTypeIndices
-            .Skip(NestedTypesStart)
-            .Take(NestedTypeCount)
+        : LibCpp2IlMain.TheMetadata.GetNestedTypeIndicesFromIndexAndCount(NestedTypesStart, NestedTypeCount)
             .Select(Il2CppVariableWidthIndex<Il2CppTypeDefinition>.MakeTemporaryForFixedWidthUsage) //DynWidth: nestedTypeIndices is always int, so making temp is ok
             .Select(LibCpp2IlMain.TheMetadata.GetTypeDefinitionFromIndex)
             .ToArray();
@@ -401,12 +406,12 @@ public class Il2CppTypeDefinition : ReadableClass
 
         FirstFieldIdx = reader.ReadInt32();
         FirstMethodIdx = reader.ReadInt32();
-        FirstEventId = reader.ReadInt32();
-        FirstPropertyId = reader.ReadInt32();
-        NestedTypesStart = reader.ReadInt32();
+        FirstEventId = Il2CppVariableWidthIndex<Il2CppEventDefinition>.Read(reader);
+        FirstPropertyId = Il2CppVariableWidthIndex<Il2CppPropertyDefinition>.Read(reader);
+        NestedTypesStart = Il2CppVariableWidthIndex<Il2CppNestedTypeIndex>.Read(reader);
         InterfacesStart = reader.ReadInt32();
         VtableStart = reader.ReadInt32();
-        InterfaceOffsetsStart = reader.ReadInt32();
+        InterfaceOffsetsStart = Il2CppVariableWidthIndex<Il2CppInterfaceOffset>.Read(reader);
 
         MethodCount = reader.ReadUInt16();
         PropertyCount = reader.ReadUInt16();

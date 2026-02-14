@@ -21,14 +21,14 @@ public class Il2CppMetadata : ClassReadingBinaryReader
     public Il2CppAssemblyDefinition[] AssemblyDefinitions;
     public Il2CppImageDefinition[] imageDefinitions;
     public Il2CppTypeDefinition[] typeDefs;
-    internal Il2CppInterfaceOffset[] interfaceOffsets;
+    private Il2CppInterfaceOffset[] interfaceOffsets;
     public uint[] VTableMethodIndices;
     public Il2CppMethodDefinition[] methodDefs;
-    public Il2CppParameterDefinition[] parameterDefs;
+    private Il2CppParameterDefinition[] parameterDefs;
     public Il2CppFieldDefinition[] fieldDefs;
     private Il2CppFieldDefaultValue[] fieldDefaultValues;
     private Il2CppParameterDefaultValue[] parameterDefaultValues;
-    public Il2CppPropertyDefinition[] propertyDefs;
+    internal Il2CppPropertyDefinition[] propertyDefs;
     public List<Il2CppCustomAttributeTypeRange>? attributeTypeRanges; //Removed in v29
     public Il2CppStringLiteral[] stringLiterals;
     public Il2CppMetadataUsageList[]? metadataUsageLists; //Removed in v27
@@ -37,15 +37,17 @@ public class Il2CppMetadata : ClassReadingBinaryReader
     
     public int[]? attributeTypes; //Removed in v29
     public List<Il2CppCustomAttributeDataRange>? AttributeDataRanges; //Added in v29
+
+    public Il2CppInlineArrayLength[] TypeInlineArrays; //v104+. TODO: These theoretically map to [InlineArray] attributes in dummy dlls, but that's a recent language version feature, does unity actually support them yet?
     
     public Il2CppVariableWidthIndex<Il2CppType>[] interfaceIndices;
 
     //Moved to binary in v27.
     public Dictionary<uint, SortedDictionary<uint, uint>>? metadataUsageDic;
 
-    public int[] nestedTypeIndices;
-    public Il2CppEventDefinition[] eventDefs;
-    public Il2CppGenericContainer[] genericContainers;
+    private Il2CppNestedTypeIndex[] nestedTypeIndices;
+    private Il2CppEventDefinition[] eventDefs;
+    private Il2CppGenericContainer[] genericContainers;
     public Il2CppFieldRef[] fieldRefs;
     public Il2CppGenericParameter[] genericParameters;
     public int[] constraintIndices;
@@ -68,9 +70,9 @@ public class Il2CppMetadata : ClassReadingBinaryReader
         }
 
         var version = BitConverter.ToInt32(bytes, 4);
-        if (version is < 23 or > 39)
+        if (version is < 23 or > 104)
         {
-            throw new FormatException("Unsupported metadata version found! We support 23-39, got " + version);
+            throw new FormatException("Unsupported metadata version found! We support 23-104, got " + version);
         }
 
         LibLogger.VerboseNewline($"\tIL2CPP Metadata Declares its version as {version}");
@@ -183,20 +185,35 @@ public class Il2CppMetadata : ClassReadingBinaryReader
             var typeDefinitionIndexWidth = GetIndexWidth(metadataHeader.typeDefinitions.Count);
             var genericContainerIndexWidth = GetIndexWidth(metadataHeader.genericContainers.Count);
             
-            //v39 additionally makes parameter definitions use dynamic widths
-            var parameterDefinitionIndexWidth = metadataVersion >= 39 ? GetIndexWidth(metadataHeader.parameters.Count) : sizeof(int);
-            
             //Unfortunately, the type list is not in the metadata file, but the binary, so we don't have its count. We do have interface offsets, though, and those are just an index and an int.
             //So we can derive the width of a type index from that.
             var bytesPerInterfaceOffset = metadataHeader.interfaceOffsets.Size / metadataHeader.interfaceOffsets.Count;
             typeIndexSize = bytesPerInterfaceOffset - sizeof(int); //Subtract the int for the offset, the rest is the type index
             
+            //v39 additionally makes parameter definitions use dynamic widths
+            var parameterDefinitionIndexWidth = metadataVersion >= 39 ? GetIndexWidth(metadataHeader.parameters.Count) : sizeof(int);
+            
+            //v104 extends dynamic widths to interface, event, property, and nested type indices
+            var interfaceOffsetIndexWidth = metadataVersion >= 104 ? GetIndexWidth(metadataHeader.interfaceOffsets.Count) : sizeof(int);
+            var eventIndexWidth = metadataVersion >= 104 ? GetIndexWidth(metadataHeader.events.Count) : sizeof(int);
+            var propertyIndexWidth = metadataVersion >= 104 ? GetIndexWidth(metadataHeader.properties.Count) : sizeof(int);
+            var nestedTypeIndexWidth = metadataVersion >= 104 ? GetIndexWidth(metadataHeader.nestedTypes.Count) : sizeof(int);
+            
             LibLogger.VerboseNewline($"\tDetermined variable index widths - Il2CppTypeDefinition: {typeDefinitionIndexWidth * 8} bits, Il2CppGenericContainer: {genericContainerIndexWidth * 8} bits, Il2CppType: {typeIndexSize * 8} bits, Il2CppParameterDefinition: {parameterDefinitionIndexWidth * 8} bits");
+            
+            if(metadataVersion >= 104)
+                LibLogger.VerboseNewline($"\t...InterfaceIndex: {interfaceOffsetIndexWidth * 8} bits, EventIndex: {eventIndexWidth * 8} bits, PropertyIndex: {propertyIndexWidth * 8} bits, NestedTypeIndex: {nestedTypeIndexWidth * 8} bits");
+            
             
             Il2CppVariableWidthIndex<Il2CppType>.BeginReadSession(typeIndexSize);
             Il2CppVariableWidthIndex<Il2CppTypeDefinition>.BeginReadSession(typeDefinitionIndexWidth);
             Il2CppVariableWidthIndex<Il2CppGenericContainer>.BeginReadSession(genericContainerIndexWidth);
             Il2CppVariableWidthIndex<Il2CppParameterDefinition>.BeginReadSession(parameterDefinitionIndexWidth);
+            
+            Il2CppVariableWidthIndex<Il2CppInterfaceOffset>.BeginReadSession(interfaceOffsetIndexWidth);
+            Il2CppVariableWidthIndex<Il2CppEventDefinition>.BeginReadSession(eventIndexWidth);
+            Il2CppVariableWidthIndex<Il2CppPropertyDefinition>.BeginReadSession(propertyIndexWidth);
+            Il2CppVariableWidthIndex<Il2CppNestedTypeIndex>.BeginReadSession(nestedTypeIndexWidth);
         }
         else
         {
@@ -208,6 +225,11 @@ public class Il2CppMetadata : ClassReadingBinaryReader
             Il2CppVariableWidthIndex<Il2CppTypeDefinition>.BeginReadSessionOnLegacyVersion();
             Il2CppVariableWidthIndex<Il2CppGenericContainer>.BeginReadSessionOnLegacyVersion();
             Il2CppVariableWidthIndex<Il2CppParameterDefinition>.BeginReadSessionOnLegacyVersion();
+            
+            Il2CppVariableWidthIndex<Il2CppInterfaceOffset>.BeginReadSessionOnLegacyVersion();
+            Il2CppVariableWidthIndex<Il2CppEventDefinition>.BeginReadSessionOnLegacyVersion();
+            Il2CppVariableWidthIndex<Il2CppPropertyDefinition>.BeginReadSessionOnLegacyVersion();
+            Il2CppVariableWidthIndex<Il2CppNestedTypeIndex>.BeginReadSessionOnLegacyVersion();
         }
 
         try
@@ -274,7 +296,7 @@ public class Il2CppMetadata : ClassReadingBinaryReader
 
             LibLogger.Verbose("\tReading nested type definitions...");
             start = DateTime.Now;
-            nestedTypeIndices = ReadClassArrayAtRawAddr<int>(metadataHeader.nestedTypes.Offset, metadataHeader.nestedTypes.Size / sizeof(int));
+            nestedTypeIndices = ReadMetadataClassArray<Il2CppNestedTypeIndex>(metadataHeader.nestedTypes);
             LibLogger.VerboseNewline($"OK ({(DateTime.Now - start).TotalMilliseconds} ms)");
 
             LibLogger.Verbose("\tReading event definitions...");
@@ -356,6 +378,17 @@ public class Il2CppMetadata : ClassReadingBinaryReader
                 AttributeDataRanges = ReadReadableArrayAtRawAddr<Il2CppCustomAttributeDataRange>(metadataHeader.attributeDataRange.Offset, metadataHeader.attributeDataRange.Size / 8).ToList();
                 LibLogger.VerboseNewline($"OK ({(DateTime.Now - start).TotalMilliseconds} ms)");
             }
+            
+            //v104+ fields
+            if(MetadataVersion >= 104)
+            {
+                LibLogger.Verbose("\tReading type inline arrays...");
+                start = DateTime.Now;
+
+                TypeInlineArrays = ReadMetadataClassArray<Il2CppInlineArrayLength>(metadataHeader.typeInlineArrays);
+                
+                LibLogger.VerboseNewline($"OK ({(DateTime.Now - start).TotalMilliseconds} ms)");
+            }
 
             LibLogger.Verbose("\tBuilding Lookup Table for field defaults...");
             start = DateTime.Now;
@@ -374,6 +407,11 @@ public class Il2CppMetadata : ClassReadingBinaryReader
             Il2CppVariableWidthIndex<Il2CppTypeDefinition>.EndReadSession();
             Il2CppVariableWidthIndex<Il2CppGenericContainer>.EndReadSession();
             Il2CppVariableWidthIndex<Il2CppParameterDefinition>.EndReadSession();
+            
+            Il2CppVariableWidthIndex<Il2CppInterfaceOffset>.EndReadSession();
+            Il2CppVariableWidthIndex<Il2CppEventDefinition>.EndReadSession();
+            Il2CppVariableWidthIndex<Il2CppPropertyDefinition>.EndReadSession();
+            Il2CppVariableWidthIndex<Il2CppNestedTypeIndex>.EndReadSession();
         }
     }
 #pragma warning restore 8618
@@ -564,6 +602,14 @@ public class Il2CppMetadata : ClassReadingBinaryReader
     public Il2CppGenericContainer GetGenericContainerFromIndex(Il2CppVariableWidthIndex<Il2CppGenericContainer> index) => genericContainers[index.Value];
     
     public Il2CppParameterDefinition GetParameterDefinitionFromIndex(Il2CppVariableWidthIndex<Il2CppParameterDefinition> index) => parameterDefs[index.Value];
+    
+    public IEnumerable<int> GetNestedTypeIndicesFromIndexAndCount(Il2CppVariableWidthIndex<Il2CppNestedTypeIndex> index, int count) => nestedTypeIndices.Skip(index.Value).Take(count).Select(n => n.Value);
+
+    public Il2CppInterfaceOffset[] GetInterfaceOffsetsFromIndexAndCount(Il2CppVariableWidthIndex<Il2CppInterfaceOffset> index, int count) => interfaceOffsets.SubArray(index.Value, count);
+    
+    public Il2CppPropertyDefinition[] GetPropertyDefinitionsFromIndexAndCount(Il2CppVariableWidthIndex<Il2CppPropertyDefinition> index, int count) => propertyDefs.SubArray(index.Value, count);
+    
+    public Il2CppEventDefinition[] GetEventDefinitionsFromIndexAndCount(Il2CppVariableWidthIndex<Il2CppEventDefinition> index, int count) => eventDefs.SubArray(index.Value, count);
 
     public string GetStringLiteralFromIndex(uint index)
     {
