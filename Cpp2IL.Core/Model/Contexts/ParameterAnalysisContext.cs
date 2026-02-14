@@ -82,7 +82,7 @@ public class ParameterAnalysisContext : HasCustomAttributesAndName, IParameterIn
 
             if (Attributes.HasFlag(ParameterAttributes.HasDefault))
             {
-                DefaultValue = AppContext.Metadata.GetParameterDefaultValueFromIndex(declaringMethod.Definition!.parameterStart + parameterIndex)!;
+                DefaultValue = AppContext.Metadata.GetParameterDefaultValueFromIndex(declaringMethod.Definition!.parameterStart.Value + parameterIndex)!;
             }
         }
     }

@@ -7,6 +7,7 @@ public class Il2CppAssemblyDefinition : ReadableClass
 {
     public int ImageIndex;
     [Version(Min = 24.1f)] public uint Token;
+    [Version(Min = 38.0f)] public uint ModuleToken;
     [Version(Max = 24.0f)] public int CustomAttributeIndex;
     public int ReferencedAssemblyStart;
     public int ReferencedAssemblyCount;
@@ -27,6 +28,8 @@ public class Il2CppAssemblyDefinition : ReadableClass
         ImageIndex = reader.ReadInt32();
         if (IsAtLeast(24.1f))
             Token = reader.ReadUInt32();
+        if (IsAtLeast(38.0f))
+            ModuleToken = reader.ReadUInt32();
         if (IsAtMost(24.0f))
             CustomAttributeIndex = reader.ReadInt32();
         ReferencedAssemblyStart = reader.ReadInt32();

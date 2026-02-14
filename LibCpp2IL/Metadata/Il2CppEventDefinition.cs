@@ -9,7 +9,7 @@ namespace LibCpp2IL.Metadata;
 public class Il2CppEventDefinition : ReadableClass
 {
     public int nameIndex;
-    public int typeIndex;
+    public Il2CppVariableWidthIndex<Il2CppType> typeIndex;
     public int add;
     public int remove;
     public int raise;
@@ -67,7 +67,7 @@ public class Il2CppEventDefinition : ReadableClass
         Name = ((Il2CppMetadata)reader).ReadStringFromIndexNoReadLock(nameIndex);
         reader.Position = pos;
 
-        typeIndex = reader.ReadInt32();
+        typeIndex = Il2CppVariableWidthIndex<Il2CppType>.Read(reader);
         add = reader.ReadInt32();
         remove = reader.ReadInt32();
         raise = reader.ReadInt32();

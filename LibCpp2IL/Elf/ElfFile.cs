@@ -671,7 +671,7 @@ public sealed class ElfFile : Il2CppBinary
     private (ulong codeReg, ulong metaReg) FindCodeAndMetadataRegDefaultBehavior(Il2CppMetadata metadata)
     {
         var methodCount = metadata.methodDefs.Count(x => x.methodIndex >= 0);
-        var typeDefinitionsCount = metadata.typeDefs.Length;
+        var typeDefinitionsCount = metadata.TypeDefinitionCount;
         
         LibLogger.VerboseNewline("Searching for il2cpp structures in an ELF binary using non-arch-specific method...");
         var searcher = new BinarySearcher(this, methodCount, typeDefinitionsCount);

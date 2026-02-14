@@ -57,7 +57,7 @@ public class MetadataUsage(MetadataUsageType type, ulong offset, uint value)
                 case MetadataUsageType.TypeInfo:
                     try
                     {
-                        _cachedType = LibCpp2IlMain.Binary!.GetType((int)value);
+                        _cachedType = LibCpp2IlMain.Binary!.GetType(Il2CppVariableWidthIndex<Il2CppType>.MakeTemporaryForFixedWidthUsage((int) value)); //DynWidth: value is always masked out of 32-bits, ok for temp usage
                         _cachedTypeReflectionData = LibCpp2ILUtils.GetTypeReflectionData(_cachedType);
                         _cachedName = _cachedTypeReflectionData?.ToString();
                     }

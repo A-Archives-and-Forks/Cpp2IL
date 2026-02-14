@@ -45,7 +45,9 @@ public class Il2CppType : ReadableClass
     public class Union
     {
         public ulong Dummy;
-        public long ClassIndex => (long)Dummy;
+        
+        //DynamicWidth: Dummy is always nint, not dynamic, so temp usage is ok
+        public Il2CppVariableWidthIndex<Il2CppTypeDefinition> ClassIndex => Il2CppVariableWidthIndex<Il2CppTypeDefinition>.MakeTemporaryForFixedWidthUsage((int) Dummy);
         public ulong Type => Dummy;
         public ulong Array => Dummy;
         public long GenericParameterIndex => (long)Dummy;
@@ -58,7 +60,7 @@ public class Il2CppType : ReadableClass
         {
             if (Type is not Il2CppTypeEnum.IL2CPP_TYPE_CLASS and not Il2CppTypeEnum.IL2CPP_TYPE_VALUETYPE)
                 return null;
-            return LibCpp2IlMain.TheMetadata!.typeDefs[Data.ClassIndex];
+            return LibCpp2IlMain.TheMetadata!.GetTypeDefinitionFromIndex(Data.ClassIndex);
         }
     }
 

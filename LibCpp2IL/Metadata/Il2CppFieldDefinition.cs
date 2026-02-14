@@ -7,7 +7,7 @@ namespace LibCpp2IL.Metadata;
 public class Il2CppFieldDefinition : ReadableClass
 {
     public int nameIndex;
-    public int typeIndex;
+    public Il2CppVariableWidthIndex<Il2CppType> typeIndex;
     [Version(Max = 24)] public int customAttributeIndex;
     public uint token;
 
@@ -62,7 +62,7 @@ public class Il2CppFieldDefinition : ReadableClass
         Name = ((Il2CppMetadata)reader).ReadStringFromIndexNoReadLock(nameIndex);
         reader.Position = pos;
 
-        typeIndex = reader.ReadInt32();
+        typeIndex = Il2CppVariableWidthIndex<Il2CppType>.Read(reader);
         if (IsAtMost(24f))
             customAttributeIndex = reader.ReadInt32();
         token = reader.ReadUInt32();

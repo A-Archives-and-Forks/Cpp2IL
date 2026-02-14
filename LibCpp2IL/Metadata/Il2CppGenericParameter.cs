@@ -6,7 +6,7 @@ namespace LibCpp2IL.Metadata;
 
 public class Il2CppGenericParameter : ReadableClass
 {
-    public int ownerIndex; /* Type or method this parameter was defined in. */
+    public Il2CppVariableWidthIndex<Il2CppGenericContainer> ownerIndex; /* Type or method this parameter was defined in. */
     public int nameIndex;
     public short constraintsStart;
     public short constraintsCount;
@@ -22,6 +22,7 @@ public class Il2CppGenericParameter : ReadableClass
         : LibCpp2IlMain.TheMetadata!.constraintIndices
             .Skip(constraintsStart)
             .Take(constraintsCount)
+            .Select(Il2CppVariableWidthIndex<Il2CppType>.MakeTemporaryForFixedWidthUsage) // DynWidth: constraintIndices is always int, so making temp is ok
             .Select(LibCpp2IlMain.Binary!.GetType)
             .ToArray();
 
@@ -30,13 +31,13 @@ public class Il2CppGenericParameter : ReadableClass
     /// </summary>
     public int Index { get; internal set; }
 
-    public Il2CppGenericContainer Owner => LibCpp2IlMain.TheMetadata!.genericContainers[ownerIndex];
+    public Il2CppGenericContainer Owner => LibCpp2IlMain.TheMetadata!.GetGenericContainerFromIndex(ownerIndex);
 
     public Il2CppTypeEnum Type => Owner.isGenericMethod ? Il2CppTypeEnum.IL2CPP_TYPE_MVAR : Il2CppTypeEnum.IL2CPP_TYPE_VAR;
 
     public override void Read(ClassReadingBinaryReader reader)
     {
-        ownerIndex = reader.ReadInt32();
+        ownerIndex = Il2CppVariableWidthIndex<Il2CppGenericContainer>.Read(reader);
         nameIndex = reader.ReadInt32();
         constraintsStart = reader.ReadInt16();
         constraintsCount = reader.ReadInt16();

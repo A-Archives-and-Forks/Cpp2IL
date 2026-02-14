@@ -287,9 +287,9 @@ public class BinarySearcher(Il2CppBinary binary, int methodCount, int typeDefini
 
         var bytesToSubtract = sizeOfMr - ptrSize * 4;
 
-        var potentialMetaRegPointers = MapOffsetsToVirt(FindAllBytes(BitConverter.GetBytes(LibCpp2IlMain.TheMetadata!.typeDefs.Length), 1)).ToList();
+        var potentialMetaRegPointers = MapOffsetsToVirt(FindAllBytes(BitConverter.GetBytes(LibCpp2IlMain.TheMetadata!.TypeDefinitionCount), 1)).ToList();
 
-        LibLogger.VerboseNewline($"\t\t\tFound {potentialMetaRegPointers.Count} instances of the number of type defs, {LibCpp2IlMain.TheMetadata.typeDefs.Length}");
+        LibLogger.VerboseNewline($"\t\t\tFound {potentialMetaRegPointers.Count} instances of the number of type defs, {LibCpp2IlMain.TheMetadata.TypeDefinitionCount}");
 
         potentialMetaRegPointers = potentialMetaRegPointers.Select(p => p - bytesToSubtract).ToList();
 
@@ -347,6 +347,7 @@ public class BinarySearcher(Il2CppBinary binary, int methodCount, int typeDefini
                         if (mrWords[i] == 0)
                         {
                             ok = i >= 14; //Maybe need an investigation here, but metadataUsages can be (always is?) a null ptr on v27
+                            ok |= i == 1; //genericClasses can rarely be null on v39?
                             if (!ok)
                                 LibLogger.VerboseNewline($"\t\t\tRejecting metadata registration 0x{va:X} because the pointer at index {i} is 0.");
                         }
@@ -372,22 +373,22 @@ public class BinarySearcher(Il2CppBinary binary, int methodCount, int typeDefini
                         // continue;
                     }
 
-                    if (metaReg.typeDefinitionsSizesCount != metadata.typeDefs.Length)
+                    if (metaReg.typeDefinitionsSizesCount != metadata.TypeDefinitionCount)
                     {
-                        LibLogger.VerboseNewline($"\t\t\tRejecting metadata registration 0x{va:X} because it has {metaReg.typeDefinitionsSizesCount} type def sizes, while metadata file defines {metadata.typeDefs.Length} type defs");
+                        LibLogger.VerboseNewline($"\t\t\tRejecting metadata registration 0x{va:X} because it has {metaReg.typeDefinitionsSizesCount} type def sizes, while metadata file defines {metadata.TypeDefinitionCount} type defs");
                         continue;
                     }
 
-                    if (metaReg.numTypes < metadata.typeDefs.Length)
+                    if (metaReg.numTypes < metadata.TypeDefinitionCount)
                     {
-                        LibLogger.VerboseNewline($"\t\t\tRejecting metadata registration 0x{va:X} because it has {metaReg.numTypes} types, which is less than metadata-file-defined type def count of {metadata.typeDefs.Length}");
+                        LibLogger.VerboseNewline($"\t\t\tRejecting metadata registration 0x{va:X} because it has {metaReg.numTypes} types, which is less than metadata-file-defined type def count of {metadata.TypeDefinitionCount}");
                         continue;
                     }
 
-                    if (metaReg.fieldOffsetsCount != metadata.typeDefs.Length)
+                    if (metaReg.fieldOffsetsCount != metadata.TypeDefinitionCount)
                     {
                         //If we see any cases of failing to find meta reg and this line is in verbose log, maybe the assumption (num field offsets == num type defs) is wrong.
-                        LibLogger.VerboseNewline($"\t\t\tRejecting metadata registration 0x{va:X} because it has {metaReg.fieldOffsetsCount} field offsets, while metadata file defines {metadata.typeDefs.Length} type defs");
+                        LibLogger.VerboseNewline($"\t\t\tRejecting metadata registration 0x{va:X} because it has {metaReg.fieldOffsetsCount} field offsets, while metadata file defines {metadata.TypeDefinitionCount} type defs");
                         continue;
                     }
 

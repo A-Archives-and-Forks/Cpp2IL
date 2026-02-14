@@ -7,10 +7,10 @@ public class Il2CppImageDefinition : ReadableClass
     public int nameIndex;
     public int assemblyIndex;
 
-    public int firstTypeIndex;
+    public Il2CppVariableWidthIndex<Il2CppTypeDefinition> firstTypeIndex;
     public uint typeCount;
 
-    [Version(Min = 24)] public int exportedTypeStart;
+    [Version(Min = 24)] public Il2CppVariableWidthIndex<Il2CppTypeDefinition> exportedTypeStart;
     [Version(Min = 24)] public uint exportedTypeCount;
 
     public int entryPointIndex;
@@ -21,7 +21,12 @@ public class Il2CppImageDefinition : ReadableClass
 
     public string? Name => LibCpp2IlMain.TheMetadata == null ? null : LibCpp2IlMain.TheMetadata.GetStringFromIndex(nameIndex);
 
-    public Il2CppTypeDefinition[]? Types => LibCpp2IlMain.TheMetadata == null ? null : LibCpp2IlMain.TheMetadata.typeDefs.Skip(firstTypeIndex).Take((int)typeCount).ToArray();
+    public Il2CppTypeDefinition[]? Types => LibCpp2IlMain.TheMetadata == null ? null 
+        : Enumerable
+            .Range(firstTypeIndex.Value, (int)typeCount)
+            .Select(Il2CppVariableWidthIndex<Il2CppTypeDefinition>.MakeTemporaryForFixedWidthUsage) // DynWidth: using Enumerable.Range, not read from file, so making temp is ok
+            .Select(LibCpp2IlMain.TheMetadata.GetTypeDefinitionFromIndex)
+            .ToArray();
 
     public override string ToString()
     {
@@ -31,14 +36,14 @@ public class Il2CppImageDefinition : ReadableClass
     public override void Read(ClassReadingBinaryReader reader)
     {
         nameIndex = reader.ReadInt32();
-        assemblyIndex = reader.ReadInt32();
+        assemblyIndex = reader.ReadInt32();     
 
-        firstTypeIndex = reader.ReadInt32();
+        firstTypeIndex = Il2CppVariableWidthIndex<Il2CppTypeDefinition>.Read(reader);
         typeCount = reader.ReadUInt32();
 
         if (IsAtLeast(24f))
         {
-            exportedTypeStart = reader.ReadInt32();
+            exportedTypeStart = Il2CppVariableWidthIndex<Il2CppTypeDefinition>.Read(reader);
             exportedTypeCount = reader.ReadUInt32();
         }
 

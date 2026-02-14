@@ -370,7 +370,7 @@ public abstract class Il2CppBinary(MemoryStream input) : ClassReadingBinaryReade
             ? throw new ArgumentException($"GetMethodSpec: index {index} < 0")
             : _methodSpecs[index];
 
-    public Il2CppType GetType(int index) => _types[index];
+    public Il2CppType GetType(Il2CppVariableWidthIndex<Il2CppType> index) => _types[index.Value];
     public ulong GetRawMetadataUsage(uint index) => _metadataUsages[index];
     public ulong[] GetCodegenModuleMethodPointers(int codegenModuleIndex) => _codeGenModuleMethodPointers[codegenModuleIndex];
     public Il2CppCodeGenModule? GetCodegenModuleByName(string name) => _codeGenModulesByName[name];
@@ -382,14 +382,14 @@ public abstract class Il2CppBinary(MemoryStream input) : ClassReadingBinaryReade
     public Il2CppType GetIl2CppTypeFromPointer(ulong pointer)
         => _typesByAddress[pointer];
 
-    public int GetFieldOffsetFromIndex(int typeIndex, int fieldIndexInType, int fieldIndex, bool isValueType, bool isStatic)
+    public int GetFieldOffsetFromIndex(Il2CppVariableWidthIndex<Il2CppTypeDefinition> typeIndex, int fieldIndexInType, int fieldIndex, bool isValueType, bool isStatic)
     {
         try
         {
             var offset = -1;
             if (LibCpp2IlMain.MetadataVersion > 21)
             {
-                var ptr = (ulong)_fieldOffsets[typeIndex];
+                var ptr = (ulong)_fieldOffsets[typeIndex.Value];
                 if (ptr > 0)
                 {
                     var offsetOffset = (ulong)MapVirtualAddressToRaw(ptr) + 4ul * (ulong)fieldIndexInType;
@@ -493,7 +493,7 @@ public abstract class Il2CppBinary(MemoryStream input) : ClassReadingBinaryReade
         LibLogger.VerboseNewline("\tAttempting to locate code and metadata registration functions...");
 
         var methodCount = metadata.methodDefs.Count(x => x.methodIndex >= 0);
-        var typeDefinitionsCount = metadata.typeDefs.Length;
+        var typeDefinitionsCount = metadata.TypeDefinitionCount;
 
         var plusSearch = new BinarySearcher(this, methodCount, typeDefinitionsCount);
 

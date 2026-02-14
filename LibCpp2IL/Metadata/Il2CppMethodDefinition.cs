@@ -11,12 +11,12 @@ namespace LibCpp2IL.Metadata;
 public class Il2CppMethodDefinition : ReadableClass
 {
     public int nameIndex;
-    public int declaringTypeIdx;
-    public int returnTypeIdx;
+    public Il2CppVariableWidthIndex<Il2CppTypeDefinition> declaringTypeIdx;
+    public Il2CppVariableWidthIndex<Il2CppType> returnTypeIdx;
     [Version(Min = 31)] public uint returnParameterToken;
-    public int parameterStart;
+    public Il2CppVariableWidthIndex<Il2CppParameterDefinition> parameterStart;
     [Version(Max = 24)] public int customAttributeIndex;
-    public int genericContainerIndex;
+    public Il2CppVariableWidthIndex<Il2CppGenericContainer> genericContainerIndex;
     [Version(Max = 24.15f)] public int methodIndex;
     [Version(Max = 24.15f)] public int invokerIndex;
     [Version(Max = 24.15f)] public int delegateWrapperIndex;
@@ -42,7 +42,7 @@ public class Il2CppMethodDefinition : ReadableClass
 
     public Il2CppTypeReflectionData? ReturnType => LibCpp2IlMain.Binary == null ? null : LibCpp2ILUtils.GetTypeReflectionData(LibCpp2IlMain.Binary.GetType(returnTypeIdx));
 
-    public Il2CppTypeDefinition? DeclaringType => LibCpp2IlMain.TheMetadata == null ? null : LibCpp2IlMain.TheMetadata.typeDefs[declaringTypeIdx];
+    public Il2CppTypeDefinition? DeclaringType => LibCpp2IlMain.TheMetadata == null ? null : LibCpp2IlMain.TheMetadata.GetTypeDefinitionFromIndex(declaringTypeIdx);
 
     private ulong? _methodPointer = null;
 
@@ -88,12 +88,15 @@ public class Il2CppMethodDefinition : ReadableClass
             if (LibCpp2IlMain.TheMetadata == null || LibCpp2IlMain.Binary == null)
                 return null;
 
-            if (parameterStart < 0 || parameterCount == 0)
+            if (parameterStart.IsNull || parameterCount == 0)
                 return [];
 
             var ret = new Il2CppParameterDefinition[parameterCount];
 
-            Array.Copy(LibCpp2IlMain.TheMetadata.parameterDefs, parameterStart, ret, 0, parameterCount);
+            for (var i = 0; i < parameterCount; i++)
+            {
+                ret[i] = LibCpp2IlMain.TheMetadata.GetParameterDefinitionFromIndex(Il2CppVariableWidthIndex<Il2CppParameterDefinition>.MakeTemporaryForFixedWidthUsage(parameterStart.Value + i));
+            }
 
             return ret;
         }
@@ -117,7 +120,7 @@ public class Il2CppMethodDefinition : ReadableClass
                     {
                         var paramType = LibCpp2IlMain.Binary!.GetType(paramDef.typeIndex);
                         var paramFlags = (ParameterAttributes)paramType.Attrs;
-                        var paramDefaultData = (paramFlags & ParameterAttributes.HasDefault) != 0 ? LibCpp2IlMain.TheMetadata!.GetParameterDefaultValueFromIndex(parameterStart + idx) : null;
+                        var paramDefaultData = (paramFlags & ParameterAttributes.HasDefault) != 0 ? LibCpp2IlMain.TheMetadata!.GetParameterDefaultValueFromIndex(parameterStart.Value + idx) : null;
                         return new Il2CppParameterReflectionData
                         {
                             Type = LibCpp2ILUtils.GetTypeReflectionData(paramType)!,
@@ -134,8 +137,8 @@ public class Il2CppMethodDefinition : ReadableClass
         }
     }
 
-    public Il2CppGenericContainer? GenericContainer => genericContainerIndex < 0 ? null : LibCpp2IlMain.TheMetadata?.genericContainers[genericContainerIndex];
-
+    public Il2CppGenericContainer? GenericContainer => genericContainerIndex.IsNull ? null : LibCpp2IlMain.TheMetadata?.GetGenericContainerFromIndex(genericContainerIndex);
+    
     public bool IsUnmanagedCallersOnly => (iflags & 0xF000) != 0;
     
     public MethodImplAttributes MethodImplAttributes => (MethodImplAttributes)(iflags & ~0xF000);
@@ -157,18 +160,18 @@ public class Il2CppMethodDefinition : ReadableClass
         Name = ((Il2CppMetadata)reader).ReadStringFromIndexNoReadLock(nameIndex);
         reader.Position = pos;
 
-        declaringTypeIdx = reader.ReadInt32();
-        returnTypeIdx = reader.ReadInt32();
+        declaringTypeIdx = Il2CppVariableWidthIndex<Il2CppTypeDefinition>.Read(reader);
+        returnTypeIdx = Il2CppVariableWidthIndex<Il2CppType>.Read(reader);
 
         if (IsAtLeast(31))
             returnParameterToken = reader.ReadUInt32();
 
-        parameterStart = reader.ReadInt32();
+        parameterStart = Il2CppVariableWidthIndex<Il2CppParameterDefinition>.Read(reader);
 
         if (IsAtMost(24))
             customAttributeIndex = reader.ReadInt32();
 
-        genericContainerIndex = reader.ReadInt32();
+        genericContainerIndex = Il2CppVariableWidthIndex<Il2CppGenericContainer>.Read(reader);
 
         if (IsAtMost(24.15f))
         {

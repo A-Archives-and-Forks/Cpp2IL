@@ -7,18 +7,18 @@ namespace LibCpp2IL.Metadata;
 /// </summary>
 public class Il2CppFieldRef : ReadableClass
 {
-    public int typeIndex;
+    public Il2CppVariableWidthIndex<Il2CppType> typeIndex;
     public int fieldIndex; // local offset into type fields
 
     public Il2CppType? DeclaringType => LibCpp2IlMain.Binary?.GetType(typeIndex);
 
-    public Il2CppTypeDefinition? DeclaringTypeDefinition => LibCpp2IlMain.TheMetadata?.typeDefs[DeclaringType!.Data.ClassIndex];
+    public Il2CppTypeDefinition? DeclaringTypeDefinition => LibCpp2IlMain.TheMetadata?.GetTypeDefinitionFromIndex(DeclaringType!.Data.ClassIndex);
 
     public Il2CppFieldDefinition? FieldDefinition => LibCpp2IlMain.TheMetadata?.fieldDefs[DeclaringTypeDefinition!.FirstFieldIdx + fieldIndex];
 
     public override void Read(ClassReadingBinaryReader reader)
     {
-        typeIndex = reader.ReadInt32();
+        typeIndex = Il2CppVariableWidthIndex<Il2CppType>.Read(reader);
         fieldIndex = reader.ReadInt32();
     }
 }

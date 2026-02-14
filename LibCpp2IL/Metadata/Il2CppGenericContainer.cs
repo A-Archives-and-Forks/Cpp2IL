@@ -35,21 +35,10 @@ public class Il2CppGenericContainer : ReadableClass
         }
     }
 
-    public Il2CppTypeDefinition? TypeOwner
-    {
-        get
-        {
-            return isGenericMethod ? null : LibCpp2IlMain.TheMetadata!.typeDefs[ownerIndex];
-        }
-    }
+    //DynWidth: ownerIndex is always int, so making temp is ok
+    public Il2CppTypeDefinition? TypeOwner => isGenericMethod ? null : LibCpp2IlMain.TheMetadata!.GetTypeDefinitionFromIndex(Il2CppVariableWidthIndex<Il2CppTypeDefinition>.MakeTemporaryForFixedWidthUsage(ownerIndex));
 
-    public Il2CppMethodDefinition? MethodOwner
-    {
-        get
-        {
-            return isGenericMethod ? LibCpp2IlMain.TheMetadata!.methodDefs[ownerIndex] : null;
-        }
-    }
+    public Il2CppMethodDefinition? MethodOwner => isGenericMethod ? LibCpp2IlMain.TheMetadata!.methodDefs[ownerIndex] : null;
 
     public Il2CppTypeDefinition? DeclaringType => TypeOwner ?? MethodOwner?.DeclaringType;
 

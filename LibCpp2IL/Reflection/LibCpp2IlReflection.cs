@@ -12,7 +12,7 @@ public static class LibCpp2IlReflection
     private static readonly ConcurrentDictionary<(string, string?), Il2CppTypeDefinition?> CachedTypes = new();
     private static readonly ConcurrentDictionary<string, Il2CppTypeDefinition?> CachedTypesByFullName = new();
 
-    private static readonly Dictionary<Il2CppTypeDefinition, int> TypeIndices = new();
+    private static readonly Dictionary<Il2CppTypeDefinition, Il2CppVariableWidthIndex<Il2CppTypeDefinition>> TypeIndices = new();
     private static readonly Dictionary<Il2CppMethodDefinition, int> MethodIndices = new();
     private static readonly Dictionary<Il2CppFieldDefinition, int> FieldIndices = new();
     private static readonly Dictionary<Il2CppPropertyDefinition, int> PropertyIndices = new();
@@ -21,7 +21,7 @@ public static class LibCpp2IlReflection
 
     private static readonly Dictionary<Il2CppTypeEnum, Il2CppType> PrimitiveTypeCache = new();
     public static readonly Dictionary<Il2CppTypeEnum, Il2CppTypeDefinition> PrimitiveTypeDefinitions = new();
-    private static readonly Dictionary<long, Il2CppType> Il2CppTypeCache = new();
+    private static readonly Dictionary<Il2CppVariableWidthIndex<Il2CppTypeDefinition>, Il2CppType> Il2CppTypeCache = new();
 
     internal static void ResetCaches()
     {
@@ -60,11 +60,11 @@ public static class LibCpp2IlReflection
 
         PrimitiveTypeCache[Il2CppTypeEnum.IL2CPP_TYPE_OBJECT] = LibCpp2IlMain.Binary!.AllTypes.First(t => t.Type == Il2CppTypeEnum.IL2CPP_TYPE_OBJECT && t.Byref == 0);
 
-        for (var i = 0; i < LibCpp2IlMain.TheMetadata!.typeDefs.Length; i++)
+        for (var i = 0; i < LibCpp2IlMain.TheMetadata!.TypeDefinitionCount; i++)
         {
             var typeDefinition = LibCpp2IlMain.TheMetadata.typeDefs[i];
 
-            TypeIndices[typeDefinition] = i;
+            TypeIndices[typeDefinition] = Il2CppVariableWidthIndex<Il2CppTypeDefinition>.MakeTemporaryForFixedWidthUsage(i); //DynWidth: i is computed, not read from metadata, so temp usage is ok
 
             var type = typeDefinition.RawType;
 
@@ -117,23 +117,23 @@ public static class LibCpp2IlReflection
     }
 
 
-    public static Il2CppTypeDefinition? GetTypeDefinitionByTypeIndex(int index)
+    public static Il2CppTypeDefinition? GetTypeDefinitionByTypeIndex(Il2CppVariableWidthIndex<Il2CppType> index)
     {
         if (LibCpp2IlMain.TheMetadata == null || LibCpp2IlMain.Binary == null) return null;
 
-        if (index >= LibCpp2IlMain.Binary.NumTypes || index < 0) return null;
+        if (index.IsNull) return null;
 
         var type = LibCpp2IlMain.Binary.GetType(index);
 
-        return LibCpp2IlMain.TheMetadata.typeDefs[type.Data.ClassIndex];
+        return type.CoerceToUnderlyingTypeDefinition();
     }
 
     [SuppressMessage("ReSharper", "InconsistentlySynchronizedField")]
-    public static int GetTypeIndexFromType(Il2CppTypeDefinition typeDefinition)
+    public static Il2CppVariableWidthIndex<Il2CppTypeDefinition> GetTypeIndexFromType(Il2CppTypeDefinition typeDefinition)
     {
-        if (LibCpp2IlMain.TheMetadata == null) return -1;
+        if (LibCpp2IlMain.TheMetadata == null) return Il2CppVariableWidthIndex<Il2CppTypeDefinition>.Null;
 
-        return TypeIndices.GetOrDefault(typeDefinition, -1);
+        return TypeIndices.GetOrDefault(typeDefinition, Il2CppVariableWidthIndex<Il2CppTypeDefinition>.Null);
     }
 
     // ReSharper disable InconsistentlySynchronizedField
@@ -286,7 +286,7 @@ public static class LibCpp2IlReflection
             if (type.Type is not Il2CppTypeEnum.IL2CPP_TYPE_CLASS and not Il2CppTypeEnum.IL2CPP_TYPE_VALUETYPE)
                 continue;
 
-            if (type.Data.ClassIndex == index && type.Byref == 0)
+            if (type.Data.ClassIndex.Value == index.Value && type.Byref == 0)
             {
                 lock (Il2CppTypeCache)
                 {
