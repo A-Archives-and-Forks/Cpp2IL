@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -466,10 +467,12 @@ public class Il2CppMetadata : ClassReadingBinaryReader
 
             //Now we can work out how many elements there are.
             var numElements = section.Size / elementSize;
-
+            
             if (numElements == 0) {
                 return [];
             }
+            
+            Debug.Assert(!section.HasCount || section.Count == numElements, $"Section {typeof(T).Name} has a count field of {section.Count} but we calculated {numElements} elements based on the size and element size. Dynamic-width indices wrong?");
 
             //And so we can allocate an array of that length, and assign the first element.
             var arr = new T[numElements];
