@@ -356,9 +356,21 @@ public class Il2CppTypeDefinition : ReadableClass
 
     public Il2CppGenericContainer? GenericContainer => GenericContainerIndex.IsNull ? null : LibCpp2IlMain.TheMetadata?.GetGenericContainerFromIndex(GenericContainerIndex);
 
-    public Il2CppType EnumUnderlyingType => IsEnumType 
-        ? LibCpp2IlMain.Binary!.GetType(Il2CppVariableWidthIndex<Il2CppType>.MakeTemporaryForFixedWidthUsage(ElementTypeIndex)) //DynWidth: ElementTypeIndex was removed in v35, so it's never dynamic
-        : throw new InvalidOperationException("Cannot get the underlying type of a non-enum type.");
+    public Il2CppType EnumUnderlyingType
+    {
+        get
+        {
+            if (!IsEnumType)
+                throw new InvalidOperationException("Cannot get the underlying type of a non-enum type.");
+
+            if (IsAtLeast(35f))
+                //v35: ElementTypeIndex removed, enum base type is just normal base type
+                return RawBaseType!;
+            
+            //pre-v35: ElementTypeIndex is used for enums to store the underlying type, so we need to get the type from there instead of the parent index (which is just System.Enum)
+            return LibCpp2IlMain.Binary!.GetType(Il2CppVariableWidthIndex<Il2CppType>.MakeTemporaryForFixedWidthUsage(ElementTypeIndex));
+        }
+    }
 
     public override string? ToString()
     {

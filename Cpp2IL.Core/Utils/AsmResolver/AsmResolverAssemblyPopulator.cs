@@ -31,7 +31,11 @@ public static class AsmResolverAssemblyPopulator
             PopulateGenericParamsForType(typeCtx, typeDefinition);
 
             //Set base type
-            typeDefinition.BaseType = typeCtx.BaseType?.ToTypeSignature(typeDefinition.DeclaringModule!).ToTypeDefOrRef();
+            if(asmCtx.AppContext.MetadataVersion >= 35 && typeCtx is {Definition.IsEnumType: true })
+                //v35 restructures this a bit so that enums now directly inherit from their primitive type, so we need to explicitly set this to enum
+                typeDefinition.BaseType = typeCtx.AppContext.SystemTypes.EnumType.ToTypeSignature(typeDefinition.DeclaringModule!).ToTypeDefOrRef();
+            else
+                typeDefinition.BaseType = typeCtx.BaseType?.ToTypeSignature(typeDefinition.DeclaringModule!).ToTypeDefOrRef();
 
             //Set interfaces
             foreach (var interfaceType in typeCtx.InterfaceContexts)
