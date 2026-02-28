@@ -417,8 +417,13 @@ public class Il2CppMetadata : ClassReadingBinaryReader
 
             LibLogger.Verbose("\tBuilding Lookup Table for field defaults...");
             start = DateTime.Now;
-            foreach (var il2CppFieldDefaultValue in fieldDefaultValues)
+            for (var i = 0; i < fieldDefaultValues.Length; i++)
             {
+                if(MetadataVersion >= 104 && i == fieldDefaultValues.Length - 1 && fieldDefaultValues[i].fieldIndex.Value == -1)
+                    //v104 added this silly dummy entry at the end with field and type index -1. We skip it.
+                    continue;
+                
+                var il2CppFieldDefaultValue = fieldDefaultValues[i];
                 _fieldDefaultValueLookup[il2CppFieldDefaultValue.fieldIndex] = il2CppFieldDefaultValue;
                 _fieldDefaultLookupNew[GetFieldDefinitionFromIndex(il2CppFieldDefaultValue.fieldIndex)] = il2CppFieldDefaultValue;
             }
@@ -636,6 +641,8 @@ public class Il2CppMetadata : ClassReadingBinaryReader
     public Il2CppParameterDefinition GetParameterDefinitionFromIndex(Il2CppVariableWidthIndex<Il2CppParameterDefinition> index) => parameterDefs[index.Value];
     
     public IEnumerable<int> GetNestedTypeIndicesFromIndexAndCount(Il2CppVariableWidthIndex<Il2CppNestedTypeIndex> index, int count) => nestedTypeIndices.Skip(index.Value).Take(count).Select(n => n.Value);
+
+    public IEnumerable<Il2CppVariableWidthIndex<Il2CppType>> GetInterfaceIndicesFromIndexAndCount(Il2CppVariableWidthIndex<Il2CppInterfaceOffset> index, int count) => interfaceIndices.Skip(index.Value).Take(count);
 
     public Il2CppInterfaceOffset[] GetInterfaceOffsetsFromIndexAndCount(Il2CppVariableWidthIndex<Il2CppInterfaceOffset> index, int count) => interfaceOffsets.SubArray(index.Value, count);
     

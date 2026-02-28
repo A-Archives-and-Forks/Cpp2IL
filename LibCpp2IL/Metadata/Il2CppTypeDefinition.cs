@@ -34,7 +34,7 @@ public class Il2CppTypeDefinition : ReadableClass
     public Il2CppVariableWidthIndex<Il2CppEventDefinition> FirstEventId;
     public Il2CppVariableWidthIndex<Il2CppPropertyDefinition> FirstPropertyId;
     public Il2CppVariableWidthIndex<Il2CppNestedTypeIndex> NestedTypesStart;
-    public int InterfacesStart;
+    public Il2CppVariableWidthIndex<Il2CppInterfaceOffset> InterfacesStart;
     public int VtableStart;
     public Il2CppVariableWidthIndex<Il2CppInterfaceOffset> InterfaceOffsetsStart;
 
@@ -336,9 +336,7 @@ public class Il2CppTypeDefinition : ReadableClass
 
     public Il2CppType[] RawInterfaces => LibCpp2IlMain.TheMetadata == null || LibCpp2IlMain.Binary == null
         ? []
-        : LibCpp2IlMain.TheMetadata.interfaceIndices
-            .Skip(InterfacesStart)
-            .Take(InterfacesCount)
+        : LibCpp2IlMain.TheMetadata.GetInterfaceIndicesFromIndexAndCount(InterfacesStart, InterfacesCount)
             .Select(LibCpp2IlMain.Binary.GetType)
             .ToArray();
 
@@ -413,7 +411,7 @@ public class Il2CppTypeDefinition : ReadableClass
         FirstEventId = Il2CppVariableWidthIndex<Il2CppEventDefinition>.Read(reader);
         FirstPropertyId = Il2CppVariableWidthIndex<Il2CppPropertyDefinition>.Read(reader);
         NestedTypesStart = Il2CppVariableWidthIndex<Il2CppNestedTypeIndex>.Read(reader);
-        InterfacesStart = reader.ReadInt32();
+        InterfacesStart = Il2CppVariableWidthIndex<Il2CppInterfaceOffset>.Read(reader);
         VtableStart = reader.ReadInt32();
         InterfaceOffsetsStart = Il2CppVariableWidthIndex<Il2CppInterfaceOffset>.Read(reader);
 

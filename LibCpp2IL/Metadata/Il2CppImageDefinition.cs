@@ -13,7 +13,7 @@ public class Il2CppImageDefinition : ReadableClass
     [Version(Min = 24)] public Il2CppVariableWidthIndex<Il2CppTypeDefinition> exportedTypeStart;
     [Version(Min = 24)] public uint exportedTypeCount;
 
-    public int entryPointIndex;
+    public Il2CppVariableWidthIndex<Il2CppMethodDefinition> entryPointIndex;
     public uint token;
 
     [Version(Min = 24.1f)] public int customAttributeStart;
@@ -47,7 +47,7 @@ public class Il2CppImageDefinition : ReadableClass
             exportedTypeCount = reader.ReadUInt32();
         }
 
-        entryPointIndex = reader.ReadInt32();
+        entryPointIndex = Il2CppVariableWidthIndex<Il2CppMethodDefinition>.Read(reader);
         token = reader.ReadUInt32();
 
         if (IsAtLeast(24.1f))
