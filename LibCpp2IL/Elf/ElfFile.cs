@@ -115,9 +115,19 @@ public sealed class ElfFile : Il2CppBinary
         LibLogger.VerboseNewline("\tProcessing Symbols...");
         start = DateTime.Now;
 
-        ProcessSymbols();
+        try
+        {
+            ProcessSymbols();
 
-        LibLogger.VerboseNewline($"\tOK ({(DateTime.Now - start).TotalMilliseconds} ms)");
+            LibLogger.VerboseNewline($"\tOK ({(DateTime.Now - start).TotalMilliseconds} ms)");
+        }
+        catch (Exception e)
+        {
+            LibLogger.ErrorNewline($"\tCaught {e.GetType().Name} processing symbols! Attempting to continue without symbol information (no exports, for example)...");
+#if DEBUG
+            LibLogger.ErrorNewline(e.ToString());
+#endif
+        }
 
         LibLogger.Verbose("\tProcessing Initializers...");
         start = DateTime.Now;
@@ -397,7 +407,12 @@ public sealed class ElfFile : Il2CppBinary
         {
             if (GetDynamicEntryOfType(ElfDynamicType.DT_SYMTAB) is { } dynamicSymTab)
             {
-                var end = _dynamicSection.Where(x => x.Value > dynamicSymTab.Value).OrderBy(x => x.Value).First().Value;
+                var endSection = _dynamicSection.Where(x => x.Value > dynamicSymTab.Value).OrderBy(x => x.Value).FirstOrDefault();
+                ulong end;
+                if(endSection != null)
+                    end = endSection.Value;
+                else
+                    end = GetProgramHeaderOfType(ElfProgramEntryType.PT_DYNAMIC) is {} dynamicSegment ? dynamicSegment.VirtualAddress + dynamicSegment.RawSize : (ulong)RawLength;
                 var dynSymSize = is32Bit ? 18ul : 24ul;
 
                 var address = (ulong)MapVirtualAddressToRaw(dynamicSymTab.Value);
