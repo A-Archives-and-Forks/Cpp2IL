@@ -295,138 +295,143 @@ public class MfuscatorSupportPlugin : Cpp2IlPlugin
         var stringLiteralsStart = sections[StringLiteralsSectionIndex].Start;
         var stringLiteralsSize = sections[StringLiteralsSectionIndex].End - sections[StringLiteralsSectionIndex].Start;
 
-        var usingOffsetNotSize = false;
-        byte sectionsXorKeyAddend = 0;
-        
-        foreach (var testUsingOffset in stackalloc bool[] { true, false })
+        foreach (var usingOffsetNotSize in stackalloc bool[] { true, false })
         {
-            var stringLiteralsKeyComponent = testUsingOffset ? stringLiteralsStart : stringLiteralsSize;
-            var testAddend = (byte)((stringLiteralsIsPlus ? (stringLiteralsXorKey - stringLiteralsKeyComponent) : (stringLiteralsXorKey + stringLiteralsKeyComponent)) & 0xFF);
-
-            //Now decrypt the string literals section
-            var decryptedLiterals = new byte[stringLiteralsSize];
-            CyclicXor(
-                encryptedMetadata.AsSpan(sections[StringLiteralsSectionIndex].Start, stringLiteralsSize),
-                decryptedLiterals,
-                testAddend,
-                stringLiteralsIsPlus,
-                stringLiteralsStart
-            );
-            
-            if(decryptedLiterals[0] == 0 && decryptedLiterals[1] == 0)
+            try
             {
-                usingOffsetNotSize = testUsingOffset;
-                sectionsXorKeyAddend = testAddend;
-                decryptedSectionBytes[StringLiteralsSectionIndex] = decryptedLiterals;
-                break;
-            }
-        }
-        
-        if(!decryptedSectionBytes.ContainsKey(StringLiteralsSectionIndex))
-            throw new Exception("Failed to determine whether section keys are based on offsets or sizes");
-        
-        Logger.VerboseNewline($"Section keys are based on {(usingOffsetNotSize ? "offsets" : "sizes")}, with addend 0x{sectionsXorKeyAddend:X2}");
+                byte sectionsXorKeyAddend = 0;
+                var stringLiteralsKeyComponent = usingOffsetNotSize ? stringLiteralsStart : stringLiteralsSize;
+                var testAddend = (byte)((stringLiteralsIsPlus ? (stringLiteralsXorKey - stringLiteralsKeyComponent) : (stringLiteralsXorKey + stringLiteralsKeyComponent)) & 0xFF);
 
-        //String literal data starts with 2 00 bytes, so we can get the direction from that
-        var stringLiteralDataStart = sections[StringLiteralsDataSectionIndex].Start;
-        var stringLiteralDataSize = sections[StringLiteralsDataSectionIndex].End - sections[StringLiteralsDataSectionIndex].Start;
-        var stringLiteralDataKeyComponent = usingOffsetNotSize ? stringLiteralDataStart : stringLiteralDataSize;
-        
-        var firstByte = encryptedMetadata[stringLiteralDataStart];
-        var secondByte = encryptedMetadata[stringLiteralDataStart + 1];
-        var stringLiteralDataIsPlus = ((firstByte + 1) & 0xFF) == secondByte;
-        var stringLiteralDataIsMinus = ((firstByte - 1) & 0xFF) == secondByte;
-        if(!stringLiteralDataIsPlus && !stringLiteralDataIsMinus)
-            throw new Exception("Failed to determine string literal data XOR direction");
-        
-        //And decrypt it
-        var decryptedLiteralData = decryptedSectionBytes[StringLiteralsDataSectionIndex] = new byte[stringLiteralDataSize];
-        CyclicXor(
-            encryptedMetadata.AsSpan(stringLiteralDataStart, stringLiteralDataSize),
-            decryptedLiteralData,
-            sectionsXorKeyAddend,
-            stringLiteralDataIsPlus,
-            stringLiteralDataKeyComponent
-        );
-        
-        //Strings are a bit harder, we need to look for the null terminators in the first 32 bytes
-        var stringsSectionStart = sections[StringsSectionIndex].Start;
-        var stringsSectionSize = sections[StringsSectionIndex].End - sections[StringsSectionIndex].Start;
-        var stringsSectionKeyComponent = usingOffsetNotSize ? stringsSectionStart : stringsSectionSize;
-        var stringsFirstXorByteOffset = 0;
-        var stringsIsPlus = false;
-        var foundZeroBytes = 0;
-        foreach (var testIsPlus in new bool[] { true, false })
-        {
-            stringsIsPlus = testIsPlus;
-            for (var i = 0; i < 32; i++)
-            {
-                var assumedXorKey = (byte) ((testIsPlus 
-                    ? (i + stringsSectionKeyComponent + sectionsXorKeyAddend) 
-                    : (i - stringsSectionKeyComponent - sectionsXorKeyAddend)) & 0xFF);
-                var xorByte = (byte) (encryptedMetadata[stringsSectionStart + i] ^ assumedXorKey);
-                if (xorByte == 0)
-                {
-                    foundZeroBytes++;
-                    if(foundZeroBytes == 1)
-                        stringsFirstXorByteOffset = i;
-                    else if(foundZeroBytes == 2)
-                        break; //we've found the first two null terminators, which is enough to be confident we've got the right key direction
-                }
-            }
-        }
-        
-        if(foundZeroBytes != 2)
-            throw new Exception("Failed to determine strings section XOR direction");
-        
-        //sanity check
-        var stringsXorByte = (byte) ((stringsIsPlus 
-            ? (stringsFirstXorByteOffset + stringsSectionKeyComponent + sectionsXorKeyAddend) 
-            : (stringsFirstXorByteOffset - stringsSectionKeyComponent - sectionsXorKeyAddend)) & 0xFF);
-        
-        if(encryptedMetadata[stringsSectionStart + stringsFirstXorByteOffset] != stringsXorByte)
-            throw new Exception("Strings section XOR key doesn't seem to be correct");
-        
-        //ok now decrypt strings
-        var decryptedStrings = decryptedSectionBytes[StringsSectionIndex] = new byte[stringsSectionSize];
-        CyclicXor(
-            encryptedMetadata.AsSpan(stringsSectionStart, stringsSectionSize),
-            decryptedStrings,
-            sectionsXorKeyAddend,
-            stringsIsPlus,
-            stringsSectionKeyComponent
-        );
-
-        //for the rest of the sections we can just check the 3rd byte is 0 to determine the direction
-        var remainingEncryptedSections = new int[] { PropertiesSectionIndex, MethodsSectionIndex, FieldsSectionIndex, assembliesSectionIndex };
-        foreach (var sectionIndex in remainingEncryptedSections)
-        {
-            var sectionStart = sections[sectionIndex].Start;
-            var sectionSize = sections[sectionIndex].End - sections[sectionIndex].Start;
-            var sectionKeyComponent = usingOffsetNotSize ? sectionStart : sectionSize;
-
-            var decryptedSection = new byte[sectionSize];
-            foreach (var testIsPlus in new bool[] { true, false })
-            {
+                //Now decrypt the string literals section
+                var decryptedLiterals = new byte[stringLiteralsSize];
                 CyclicXor(
-                    encryptedMetadata.AsSpan(sectionStart, sectionSize),
-                    decryptedSection,
-                    sectionsXorKeyAddend,
-                    testIsPlus,
-                    sectionKeyComponent
+                    encryptedMetadata.AsSpan(sections[StringLiteralsSectionIndex].Start, stringLiteralsSize),
+                    decryptedLiterals,
+                    testAddend,
+                    stringLiteralsIsPlus,
+                    stringLiteralsKeyComponent
                 );
-                if(decryptedSection[3] == 0)
-                {
-                    decryptedSectionBytes[sectionIndex] = decryptedSection;
-                    break;
-                }
-            }
-            
-            if (!decryptedSectionBytes.ContainsKey(sectionIndex))
-                throw new Exception($"Failed to determine XOR direction for section at index {sectionIndex}");
-        }
 
-        return decryptedSectionBytes;
+                if (decryptedLiterals[0] == 0 && decryptedLiterals[1] == 0)
+                {
+                    sectionsXorKeyAddend = testAddend;
+                    decryptedSectionBytes[StringLiteralsSectionIndex] = decryptedLiterals;
+                }
+                
+                if (!decryptedSectionBytes.ContainsKey(StringLiteralsSectionIndex))
+                    throw new Exception("Failed to determine whether section keys are based on offsets or sizes");
+
+                Logger.VerboseNewline($"Section keys are based on {(usingOffsetNotSize ? "offsets" : "sizes")}, with addend 0x{sectionsXorKeyAddend:X2}");
+
+                //String literal data starts with 2 00 bytes, so we can get the direction from that
+                var stringLiteralDataStart = sections[StringLiteralsDataSectionIndex].Start;
+                var stringLiteralDataSize = sections[StringLiteralsDataSectionIndex].End - sections[StringLiteralsDataSectionIndex].Start;
+                var stringLiteralDataKeyComponent = usingOffsetNotSize ? stringLiteralDataStart : stringLiteralDataSize;
+
+                var firstByte = encryptedMetadata[stringLiteralDataStart];
+                var secondByte = encryptedMetadata[stringLiteralDataStart + 1];
+                var stringLiteralDataIsPlus = ((firstByte + 1) & 0xFF) == secondByte;
+                var stringLiteralDataIsMinus = ((firstByte - 1) & 0xFF) == secondByte;
+                if (!stringLiteralDataIsPlus && !stringLiteralDataIsMinus)
+                    throw new Exception("Failed to determine string literal data XOR direction");
+
+                //And decrypt it
+                var decryptedLiteralData = decryptedSectionBytes[StringLiteralsDataSectionIndex] = new byte[stringLiteralDataSize];
+                CyclicXor(
+                    encryptedMetadata.AsSpan(stringLiteralDataStart, stringLiteralDataSize),
+                    decryptedLiteralData,
+                    sectionsXorKeyAddend,
+                    stringLiteralDataIsPlus,
+                    stringLiteralDataKeyComponent
+                );
+
+                //Strings are a bit harder, we need to look for the null terminators in the first 32 bytes
+                var stringsSectionStart = sections[StringsSectionIndex].Start;
+                var stringsSectionSize = sections[StringsSectionIndex].End - sections[StringsSectionIndex].Start;
+                var stringsSectionKeyComponent = usingOffsetNotSize ? stringsSectionStart : stringsSectionSize;
+                var stringsFirstXorByteOffset = 0;
+                var stringsIsPlus = false;
+                var foundZeroBytes = 0;
+                foreach (var testIsPlus in new bool[] { true, false })
+                {
+                    stringsIsPlus = testIsPlus;
+                    for (var i = 0; i < 32; i++)
+                    {
+                        var assumedXorKey = (byte)((testIsPlus
+                            ? (i + stringsSectionKeyComponent + sectionsXorKeyAddend)
+                            : (i - stringsSectionKeyComponent - sectionsXorKeyAddend)) & 0xFF);
+                        var xorByte = (byte)(encryptedMetadata[stringsSectionStart + i] ^ assumedXorKey);
+                        if (xorByte == 0)
+                        {
+                            foundZeroBytes++;
+                            if (foundZeroBytes == 1)
+                                stringsFirstXorByteOffset = i;
+                            else if (foundZeroBytes == 2)
+                                break; //we've found the first two null terminators, which is enough to be confident we've got the right key direction
+                        }
+                    }
+                }
+
+                if (foundZeroBytes != 2)
+                    throw new Exception("Failed to determine strings section XOR direction");
+
+                //sanity check
+                var stringsXorByte = (byte)((stringsIsPlus
+                    ? (stringsFirstXorByteOffset + stringsSectionKeyComponent + sectionsXorKeyAddend)
+                    : (stringsFirstXorByteOffset - stringsSectionKeyComponent - sectionsXorKeyAddend)) & 0xFF);
+
+                if (encryptedMetadata[stringsSectionStart + stringsFirstXorByteOffset] != stringsXorByte)
+                    throw new Exception("Strings section XOR key doesn't seem to be correct");
+
+                //ok now decrypt strings
+                var decryptedStrings = decryptedSectionBytes[StringsSectionIndex] = new byte[stringsSectionSize];
+                CyclicXor(
+                    encryptedMetadata.AsSpan(stringsSectionStart, stringsSectionSize),
+                    decryptedStrings,
+                    sectionsXorKeyAddend,
+                    stringsIsPlus,
+                    stringsSectionKeyComponent
+                );
+
+                //for the rest of the sections we can just check the 3rd byte is 0 to determine the direction
+                var remainingEncryptedSections = new int[] { PropertiesSectionIndex, MethodsSectionIndex, FieldsSectionIndex, assembliesSectionIndex };
+                foreach (var sectionIndex in remainingEncryptedSections)
+                {
+                    var sectionStart = sections[sectionIndex].Start;
+                    var sectionSize = sections[sectionIndex].End - sections[sectionIndex].Start;
+                    var sectionKeyComponent = usingOffsetNotSize ? sectionStart : sectionSize;
+
+                    var decryptedSection = new byte[sectionSize];
+                    foreach (var testIsPlus in new bool[] { true, false })
+                    {
+                        CyclicXor(
+                            encryptedMetadata.AsSpan(sectionStart, sectionSize),
+                            decryptedSection,
+                            sectionsXorKeyAddend,
+                            testIsPlus,
+                            sectionKeyComponent
+                        );
+                        if (decryptedSection[3] == 0)
+                        {
+                            decryptedSectionBytes[sectionIndex] = decryptedSection;
+                            break;
+                        }
+                    }
+
+                    if (!decryptedSectionBytes.ContainsKey(sectionIndex))
+                        throw new Exception($"Failed to determine XOR direction for section at index {sectionIndex}");
+                }
+
+                return decryptedSectionBytes;
+            }
+            catch (Exception ex)
+            {
+                continue;
+            }
+        }
+        
+        throw new Exception("Failed to decrypt sections with either offset-based or size-based keys");
     }
     
     private byte[] RebuildMetadata(byte[] encryptedMetadata, List<(int Start, int End)> sections, byte stringLiteralsXorKey, bool stringLiteralsIsPlus, int offsetDelta, byte metadataVersion, int assembliesSectionIndex)
@@ -528,6 +533,8 @@ public class MfuscatorSupportPlugin : Cpp2IlPlugin
         Logger.InfoNewline($"Mfuscator header decrypted successfully. Header length: {headerLength} bytes. String literals XOR key: 0x{stringLiteralsXorKey:X2}. String literals use {(stringLiteralsIsPlus ? "plus" : "minus")} rotation. Will rebuild as version {MetadataVersion} metadata with assemblies section at index {assembliesSectionIndex}.");
         
         Logger.VerboseNewline("Decrypted header: " + string.Join("", decryptedHeader.Select(b => b.ToString("X2"))));
+
+        metadataLength = 0x2356D0C;
         
         while (metadataLength > headerLength)
         {
@@ -567,6 +574,7 @@ public class MfuscatorSupportPlugin : Cpp2IlPlugin
             }
 
             metadataLength -= 4;
+            break;
         }
         
         return null;
