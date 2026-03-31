@@ -470,8 +470,7 @@ public class MfuscatorSupportPlugin : Cpp2IlPlugin
         var decryptedHeader = DecryptHeader(originalBytes, out var stringLiteralsXorKey, out var stringLiteralsIsPlus);
         
         var headerLength = decryptedHeader.Length;
-        
-        //Find the values in the header which could be stringLiteralOffset 
+         
         var headerWords = MemoryMarshal.Cast<byte, uint>(decryptedHeader).ToArray();
         
         //There is some garbage data at the end of the file, which confuses the actual length of the metadata (which we use to find a chain through the real/fake values in the header to identify the real ones)
@@ -534,8 +533,6 @@ public class MfuscatorSupportPlugin : Cpp2IlPlugin
         
         Logger.VerboseNewline("Decrypted header: " + string.Join("", decryptedHeader.Select(b => b.ToString("X2"))));
 
-        metadataLength = 0x2356D0C;
-        
         while (metadataLength > headerLength)
         {
             Logger.VerboseNewline($"Trying metadata length 0x{metadataLength:X4}");
