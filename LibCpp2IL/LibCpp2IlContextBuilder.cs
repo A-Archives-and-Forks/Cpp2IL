@@ -25,7 +25,36 @@ public sealed class LibCpp2IlContextBuilder
         var start = DateTime.Now;
         LibLogger.InfoNewline("Initializing Metadata...");
 
-        var metadata = _context.Metadata = Il2CppMetadata.ReadFrom(metadataBytes, unityVersion);
+        Il2CppMetadata metadata;
+        try
+        {
+            metadata = Il2CppMetadata.ReadFrom(metadataBytes, unityVersion);
+        }
+        catch (Exception e)
+        {
+            if (LibCpp2IlMain.Settings.MetadataFixupFunc is not { } fixupFunc)
+                throw;
+
+            try
+            {
+                LibLogger.WarnNewline("Metadata read failed, but a fixup function is registered. Calling fixup function and then will attempt to read again...");
+                
+                var fixedBytes = fixupFunc(metadataBytes, unityVersion);
+                
+                if(fixedBytes == null)
+                    throw new Exception("Metadata fixup function returned null, cannot proceed with metadata loading. Original exception follows.", e);
+                
+                metadata = Il2CppMetadata.ReadFrom(fixedBytes, unityVersion);
+                
+                LibLogger.InfoNewline("Metadata read succeeded after fixup.");
+            }
+            catch (Exception ex2)
+            {
+                throw new Exception("Failed to read metadata, even after attempted fixup.", ex2);
+            }
+        }
+
+        _context.Metadata = metadata;
 
         _context.Il2CppTypeHasNumMods5Bits = metadata.MetadataVersion >= 27.2f;
 

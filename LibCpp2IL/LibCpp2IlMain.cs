@@ -13,6 +13,8 @@ namespace LibCpp2IL;
 
 public static class LibCpp2IlMain
 {
+    public delegate byte[]? MetadataFixupFunc(byte[] originalBytes, UnityVersion unityVersion);
+    
     private static readonly Regex UnityVersionRegex = new Regex(@"^[0-9]+\.[0-9]+\.[0-9]+[abcfxp][0-9]+$", RegexOptions.Compiled);
 
     public class LibCpp2IlSettings
@@ -20,6 +22,7 @@ public static class LibCpp2IlMain
         public bool AllowManualMetadataAndCodeRegInput;
         public bool DisableMethodPointerMapping;
         public bool DisableGlobalResolving;
+        public MetadataFixupFunc? MetadataFixupFunc; //If set, this will be called if metadata fails to parse, to allow you to attempt to fix it.
     }
 
     public static readonly LibCpp2IlSettings Settings = new();

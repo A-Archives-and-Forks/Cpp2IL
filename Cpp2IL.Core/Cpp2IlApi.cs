@@ -48,6 +48,31 @@ public static class Cpp2IlApi
         //We have to have this on, despite the cost, because we need them for attribute restoration
         LibCpp2IlMain.Settings.DisableMethodPointerMapping = false;
 
+        LibCpp2IlMain.Settings.MetadataFixupFunc = Cpp2IlPluginManager.MetadataFixupFuncs is { } funcs ? (originalBytes, version) =>
+        {
+            Logger.InfoNewline("Received request for metadata fixup from LibCpp2Il. Calling registered plugin fixup functions...");
+            
+            foreach (var func in funcs)
+            {
+                try
+                {
+                    var result = func(originalBytes, version);
+                    if (result != null)
+                    {
+                        Logger.InfoNewline("Metadata fixup function returned non-null result, using this as fixed metadata.");
+                        return result;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Logger.ErrorNewline($"Metadata fixup function threw an exception: {e}. Ignoring and trying next fixup function, if any...");
+                }
+            }
+            
+            //only get here if every fixup function returns null or throws.
+            return null;
+        } : null;
+
         LibLogger.Writer = new LibLogWriter();
     }
 
