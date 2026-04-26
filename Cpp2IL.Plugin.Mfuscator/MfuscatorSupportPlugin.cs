@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using AssetRipper.Primitives;
 using Cpp2IL.Core.Api;
 using Cpp2IL.Core.Attributes;
@@ -335,8 +336,8 @@ public class MfuscatorSupportPlugin : Cpp2IlPlugin
                 
                 if (!decryptedSectionBytes.ContainsKey(StringLiteralsSectionIndex))
                     throw new Exception("Failed to determine whether section keys are based on offsets or sizes");
-
-                Logger.VerboseNewline($"Section keys are based on {(usingOffsetNotSize ? "offsets" : "sizes")}, with addend 0x{sectionsXorKeyAddend:X2}");
+                
+                Logger.VerboseNewlineIfDebug($"Section keys are based on {(usingOffsetNotSize ? "offsets" : "sizes")}, with addend 0x{sectionsXorKeyAddend:X2}");
 
                 //String literal data starts with 2 00 bytes, so we can get the direction from that
                 var stringLiteralDataStart = sections[StringLiteralsDataSectionIndex].Start;
@@ -569,36 +570,60 @@ public class MfuscatorSupportPlugin : Cpp2IlPlugin
         Logger.InfoNewline($"Mfuscator header decrypted successfully. Header length: {headerLength} bytes. String literals XOR key: 0x{stringLiteralsXorKey:X2}. String literals use {(stringLiteralsIsPlus ? "plus" : "minus")} rotation. Will rebuild as version {MetadataVersion} metadata with assemblies section at index {assembliesSectionIndex}.");
         
         Logger.VerboseNewline("Decrypted header: " + string.Join("", decryptedHeader.Select(b => b.ToString("X2"))));
+        
+        var lengthsToTry = Enumerable.Sequence(metadataLength, headerLength, -4).ToArray();
+        byte[]? rebuiltMetadata = null;
+        var winningIndex = long.MaxValue;
+        var rebuiltMetadataLock = new object();
 
-        while (metadataLength > headerLength)
+        // Preserve the original highest-length-first behavior while still stopping lower-priority work once a candidate is found.
+        Parallel.ForEach(Partitioner.Create(lengthsToTry, loadBalance: true), (length, loopState, index) =>
         {
-            Logger.VerboseNewline($"Trying metadata length 0x{metadataLength:X4}");
+            if (index > loopState.LowestBreakIteration || index > Interlocked.Read(ref winningIndex))
+                return;
+
+            Logger.VerboseNewlineIfDebug($"Trying metadata length 0x{length:X4}");
             
-            var paths = FindPathsThroughMetadata(headerWords, headerLength, metadataLength, out var bestDeadEnds, maxResults: 65536, debugBestN: 0, expectedSectionCount: expectedSectionCount, alignBefore: sectionAlignments, originalHeaderSize: originalHeaderSize);
+            var paths = FindPathsThroughMetadata(headerWords, headerLength, length, out var bestDeadEnds, maxResults: 65536, debugBestN: 0, expectedSectionCount: expectedSectionCount, alignBefore: sectionAlignments, originalHeaderSize: originalHeaderSize);
 
             if (paths.Count > 0)
             {
                 //We'll likely get a couple dozen paths due to the fake offsets, which vary in supposed position and delta, but they should all agree on *actual* position in file.
                 //We check that that's the case, and take those actual positions as gospel.
                 //NB actually we don't check if that's the case because they sometimes differ in unimportant sections, too bad!
-                Logger.VerboseNewline($"Found {paths.Count} possible section layouts with metadata length 0x{metadataLength:X4} bytes.");
+                Logger.VerboseNewlineIfDebug($"Found {paths.Count} possible section layouts with metadata length 0x{length:X4} bytes.");
                 
                 var actualRanges = paths.Select(path => path.Select(section => (section.ActualOffset, section.ActualOffset + section.Length)).ToArray()).ToArray();
 
                 var distinct = actualRanges.Distinct(new SectionRangeComparer()).ToArray();
                 
-                Logger.VerboseNewline($"These collapse to {distinct.Length} distinct actual section layouts.");
+                Logger.VerboseNewlineIfDebug($"These collapse to {distinct.Length} distinct actual section layouts.");
 
                 foreach (var acceptedLayout in distinct)
                 {
 
-                    Logger.VerboseNewline($"Trying section layout: " + string.Join(", ", acceptedLayout.Select(range => $"({range.Item1:X4}-{range.Item2:X4})")));
+                    Logger.VerboseNewlineIfDebug($"Trying section layout: " + string.Join(", ", acceptedLayout.Select(range => $"({range.Item1:X4}-{range.Item2:X4})")));
 
                     try
                     {
                         var ret = RebuildMetadata(originalBytes, acceptedLayout.ToList(), stringLiteralsXorKey, stringLiteralsIsPlus, offsetDelta: originalHeaderSize - headerLength, MetadataVersion, assembliesSectionIndex);
+                        var installedWinningResult = false;
+                        lock (rebuiltMetadataLock)
+                        {
+                            if (index < winningIndex)
+                            {
+                                winningIndex = index;
+                                rebuiltMetadata = ret;
+                                installedWinningResult = true;
+                            }
+                        }
+
+                        if (!installedWinningResult)
+                            return;
+
                         Logger.InfoNewline("Returning decrypted metadata now...");
-                        return ret;
+                        loopState.Break();
+                        return;
                     }
                     catch (Exception)
                     {
@@ -607,9 +632,8 @@ public class MfuscatorSupportPlugin : Cpp2IlPlugin
                 }
             }
 
-            metadataLength -= 4;
-        }
+        });
         
-        return null;
+        return rebuiltMetadata;
     }
 }
