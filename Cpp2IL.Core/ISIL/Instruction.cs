@@ -41,7 +41,6 @@ public class Instruction(int index, OpCode opcode, params object[] operands)
         {
             case OpCode.Move:
             case OpCode.Phi:
-            case OpCode.Call:
             case OpCode.Add:
             case OpCode.Subtract:
             case OpCode.Multiply:
@@ -62,6 +61,17 @@ public class Instruction(int index, OpCode opcode, params object[] operands)
                 if (newDestination != null)
                     Operands[0] = newDestination;
                 return IsConstantValue(Operands[0]) ? null : Operands[0];
+
+            // A call's operand 0 is the target; its return value is operand 1 (per OpCode.Call).
+            // CallVoid has no return value and so has no destination, and a Call may also be emitted
+            // without a return-value operand, in which case it likewise has no destination.
+            case OpCode.Call:
+                if (Operands.Count < 2)
+                    return null;
+                if (newDestination != null)
+                    Operands[1] = newDestination;
+                return IsConstantValue(Operands[1]) ? null : Operands[1];
+
             default:
                 return null;
         }

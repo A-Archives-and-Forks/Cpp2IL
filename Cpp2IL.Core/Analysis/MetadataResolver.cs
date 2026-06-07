@@ -14,7 +14,6 @@ public static class MetadataResolver
     public static void ResolveAll(MethodAnalysisContext method)
     {
         ResolveCalls(method);
-        ResolveFieldOffsets(method);
         ResolveGetter(method);
         ResolveStrings(method);
     }
@@ -52,8 +51,17 @@ public static class MetadataResolver
         }
     }
 
-    private static void ResolveFieldOffsets(MethodAnalysisContext method)
+    /// <summary>
+    /// Replaces every <c>[base + addend]</c> memory operand whose base is a typed local with a
+    /// <see cref="FieldReference"/> to the field at that offset. Returns whether any operand was
+    /// resolved this pass, so the type/field fixpoint can detect convergence: as more bases become
+    /// typed (a field load types its result, which is the base of the next load), more offsets
+    /// resolve, so this is re-run until it stops finding new fields.
+    /// </summary>
+    public static bool ResolveFieldOffsets(MethodAnalysisContext method)
     {
+        var changed = false;
+
         foreach (var instruction in method.ControlFlowGraph!.Instructions)
         {
             for (var i = 0; i < instruction.Operands.Count; i++)
@@ -76,8 +84,11 @@ public static class MetadataResolver
                     continue;
 
                 instruction.Operands[i] = new FieldReference(field, local, (int)memory.Addend);
+                changed = true;
             }
         }
+
+        return changed;
     }
 
     private static void ResolveCalls(MethodAnalysisContext method)
@@ -107,6 +118,9 @@ public static class MetadataResolver
             if (!method.AppContext.MethodsByAddress.TryGetValue(target, out var targetMethods))
                 continue;
 
+            // Several methods can share one address (identical native code merged by the linker, or
+            // generic sharing). Those are left as a numeric target here and disambiguated later by
+            // receiver type in ResolveAmbiguousCalls, once types are known.
             if (targetMethods is not [{ } singleTargetMethod])
                 continue;
 
@@ -114,6 +128,72 @@ public static class MetadataResolver
         }
 
         method.ControlFlowGraph.MergeCallBlocks();
+    }
+
+    /// <summary>
+    /// Resolves calls whose address maps to more than one method by matching the receiver's known
+    /// type against the candidates' declaring types. Runs inside the type/field fixpoint and so
+    /// re-fires as receivers become typed - a resolved call types its return value, which can type
+    /// the receiver of a further call. Returns whether any call was resolved this pass.
+    ///
+    /// Conservative by design: it commits only when exactly one non-static candidate's declaring
+    /// type matches the receiver's type. Anything still untyped or ambiguous is left for a later
+    /// pass, or left unresolved - it never guesses.
+    /// </summary>
+    public static bool ResolveAmbiguousCalls(MethodAnalysisContext method)
+    {
+        var changed = false;
+
+        foreach (var instruction in method.ControlFlowGraph!.Instructions)
+        {
+            if (!instruction.IsCall)
+                continue;
+
+            var target = instruction.Operands[0];
+
+            // A resolved call's target is a method/key-function name; only unresolved ones are still numeric.
+            if (!target.IsNumeric())
+                continue;
+
+            if (!method.AppContext.MethodsByAddress.TryGetValue((ulong)target, out var candidates) || candidates.Count < 2)
+                continue;
+
+            if (GetReceiver(instruction) is not { Type: { } receiverType })
+                continue;
+
+            MethodAnalysisContext? match = null;
+            var ambiguous = false;
+
+            foreach (var candidate in candidates)
+            {
+                if (candidate.IsStatic || !ReferenceEquals(candidate.DeclaringType, receiverType))
+                    continue;
+
+                if (match != null)
+                {
+                    ambiguous = true;
+                    break;
+                }
+
+                match = candidate;
+            }
+
+            if (ambiguous || match == null)
+                continue;
+
+            instruction.Operands[0] = match;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    // The receiver ('this') of a call is the first integer-slot argument: operand 1 for CallVoid
+    // (after the target), operand 2 for Call (after the target and the return value).
+    private static LocalVariable? GetReceiver(Instruction call)
+    {
+        var index = call.OpCode == OpCode.CallVoid ? 1 : 2;
+        return index < call.Operands.Count ? call.Operands[index] as LocalVariable : null;
     }
 
     private static void HandleKeyFunction(ApplicationAnalysisContext appContext, Instruction instruction, ulong target, BaseKeyFunctionAddresses kFA)

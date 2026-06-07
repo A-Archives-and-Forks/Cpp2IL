@@ -363,13 +363,16 @@ public class MethodAnalysisContext : HasGenericParameters, IMethodInfoProvider
         FlagConditionRecovery.Run(this);
         DeadCodeEliminator.Run(this);
 
+        // Resolve call targets, strings and getters, then run the combined type-propagation and
+        // field-resolution fixpoint - all while still in SSA form, so every local is
+        // single-assignment and a type, once known, is stable for that value.
+        MetadataResolver.ResolveAll(this);
+        LocalVariables.ResolveTypesAndFields(this);
+
         SsaForm.Remove(this);
 
-        MetadataResolver.ResolveAll(this);
+        // Now out of SSA: inline/simplify the copies SSA removal introduced, then drop dead locals.
         Simplifier.Simplify(this);
-
-        // Propagate types and clean up locals
-        LocalVariables.PropagateTypes(this);
         LocalVariables.RemoveUnused(this);
     }
 
