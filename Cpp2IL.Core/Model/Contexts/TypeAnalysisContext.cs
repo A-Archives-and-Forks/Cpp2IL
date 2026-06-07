@@ -52,7 +52,7 @@ public class TypeAnalysisContext : HasGenericParameters, ITypeInfoProvider, ICSh
     /// </summary>
     public List<TypeAnalysisContext> NestedTypes { get; internal set; } = [];
 
-    protected override int CustomAttributeIndex => Definition!.CustomAttributeIndex;
+    protected override int CustomAttributeIndex => Definition?.CustomAttributeIndex ?? -1;
 
     public override AssemblyAnalysisContext CustomAttributeAssembly => DeclaringAssembly;
 
