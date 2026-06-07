@@ -21,6 +21,8 @@ public sealed class WasmFile : Il2CppBinary
 
     public override ClassReadingBinaryReader Reader => _memoryBlock;
 
+    internal LibCpp2IlContext? Context => _context;
+
     public WasmFile(MemoryStream input) : base(input)
     {
         is32Bit = true;

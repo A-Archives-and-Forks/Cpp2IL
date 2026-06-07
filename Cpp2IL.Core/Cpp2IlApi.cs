@@ -85,15 +85,19 @@ public static class Cpp2IlApi
 
         ConfigureLib(allowUserToInputAddresses);
 
+#if !DEBUG
         try
+#endif
         {
             var context = LibCpp2IlMain.LoadFromFileAsContext(assemblyPath, metadataPath, unityVersion);
             OnLibInitialized(context);
         }
+#if !DEBUG
         catch (Exception e)
         {
             throw new LibCpp2ILInitializationException("Fatal Exception initializing LibCpp2IL!", e);
         }
+#endif
 
     }
 

@@ -69,7 +69,7 @@ public abstract class Il2CppBinary(MemoryStream input) : ClassReadingBinaryReade
 
     public int InBinaryMetadataSize { get; private set; }
 
-    private LibCpp2IlContext? _context;
+    protected LibCpp2IlContext? _context;
 
     protected override void OnReadableCreated(ReadableClass instance)
     {
