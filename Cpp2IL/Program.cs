@@ -489,7 +489,12 @@ internal static class Program
 #endif
     private static Cpp2IlRuntimeArgs GetRuntimeOptionsFromCommandLine(string[] commandLine)
     {
-        var parserResult = Parser.Default.ParseArguments<CommandLineArgs>(commandLine);
+        var parserResult = new Parser(settings =>
+        {
+            settings.AllowMultiInstance = true;
+            settings.HelpWriter = Console.Out;
+        })
+            .ParseArguments<CommandLineArgs>(commandLine);
 
         if (parserResult is NotParsed<CommandLineArgs> notParsed && notParsed.Errors.Count() == 1 && notParsed.Errors.All(e => e.Tag is ErrorType.VersionRequestedError or ErrorType.HelpRequestedError))
             //Version or help requested
@@ -536,7 +541,7 @@ internal static class Program
             if (options.GamePath != null && options.GamePath.StartsWith("~"))
                 options.GamePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + options.GamePath[1..];
 #endif
-                
+
             ResolvePathsFromCommandLine(options.GamePath, options.ExeName, ref result);
         }
         else
@@ -561,12 +566,12 @@ internal static class Program
 
         // if(string.IsNullOrEmpty(options.OutputFormatId))      // throw new SoftException("No output format specified, so nothing to do!");
 
-        if (!string.IsNullOrEmpty(options.OutputFormatId))
+        if (options.OutputFormatIds.Any() == true)
         {
             try
             {
-                result.OutputFormat = OutputFormatRegistry.GetFormat(options.OutputFormatId!);
-                Logger.VerboseNewline($"Selected output format: {result.OutputFormat.OutputFormatName}");
+                result.OutputFormats = options.OutputFormatIds.Select(OutputFormatRegistry.GetFormat).ToList();
+                Logger.VerboseNewline($"Selected output formats: [{string.Join(", ", options.OutputFormatIds)}]");
             }
             catch (Exception e)
             {
@@ -653,7 +658,13 @@ internal static class Program
 
         var executionStart = DateTime.Now;
 
-        runtimeArgs.OutputFormat?.OnOutputFormatSelected();
+        if (runtimeArgs.OutputFormats != null)
+        {
+            foreach (Cpp2IlOutputFormat format in runtimeArgs.OutputFormats)
+            {
+                format.OnOutputFormatSelected();
+            }
+        }
 
         GCSettings.LatencyMode = runtimeArgs.LowMemoryMode ? GCLatencyMode.Interactive : GCLatencyMode.SustainedLowLatency;
 
@@ -693,14 +704,16 @@ internal static class Program
 
         var outputStart = DateTime.Now;
 
-        if (runtimeArgs.OutputFormat != null)
+        if (runtimeArgs.OutputFormats != null)
         {
-            if (runtimeArgs.LowMemoryMode)
-                GC.Collect();
-
-            Logger.InfoNewline($"Outputting as {runtimeArgs.OutputFormat.OutputFormatName} to {runtimeArgs.OutputRootDirectory}...");
-            runtimeArgs.OutputFormat.DoOutput(Cpp2IlApi.CurrentAppContext, runtimeArgs.OutputRootDirectory);
-            Logger.InfoNewline($"Finished outputting in {(DateTime.Now - outputStart).TotalMilliseconds}ms");
+            foreach (Cpp2IlOutputFormat format in runtimeArgs.OutputFormats)
+            {
+                if (runtimeArgs.LowMemoryMode)
+                    GC.Collect();
+                Logger.InfoNewline($"Outputting as {format.OutputFormatName} to {runtimeArgs.OutputRootDirectory}...");
+                format.DoOutput(Cpp2IlApi.CurrentAppContext, runtimeArgs.OutputRootDirectory);
+                Logger.InfoNewline($"Finished outputting in {(DateTime.Now - outputStart).TotalMilliseconds}ms");
+            }
         }
         else
         {
