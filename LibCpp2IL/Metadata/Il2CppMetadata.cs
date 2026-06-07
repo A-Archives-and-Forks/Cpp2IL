@@ -151,7 +151,7 @@ public class Il2CppMetadata : ClassReadingBinaryReader
             //  - changes Il2CppGenericContainer type_argc int32 => uint16, is_method int32 => uint8
             //6.6.0a6 => 106.1
             //  - adds 2 new fields to Il2CppMetadataRegistration
-            //  - removes the first value of MetadataUsageType
+            //  - removes the second value of MetadataUsageType
             if(unityVersion.GreaterThanOrEquals(6000, 6, 0, UnityVersionType.Alpha, 6))
                 actualVersion = 106.1f;
             else

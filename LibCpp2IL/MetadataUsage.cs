@@ -158,8 +158,8 @@ public class MetadataUsage(MetadataUsageType type, ulong offset, uint value, Lib
     {
         var encodedType = encoded & 0xE000_0000;
         var type = (MetadataUsageType)(encodedType >> 29);
-        if (context.Metadata.MetadataVersion > 106.1f)
-            type += 1; //TypeInfo removed in v106.1
+        if (context.Metadata.MetadataVersion > 106.1f && type > MetadataUsageType.TypeInfo)
+            type += 1; //Type removed in v106.1
         
         if (type <= MetadataUsageType.MethodRef && type >= MetadataUsageType.TypeInfo)
         {
