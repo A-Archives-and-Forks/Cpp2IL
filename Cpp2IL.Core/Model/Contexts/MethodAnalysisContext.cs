@@ -369,9 +369,15 @@ public class MethodAnalysisContext : HasGenericParameters, IMethodInfoProvider
         MetadataResolver.ResolveAll(this);
         LocalVariables.ResolveTypesAndFields(this);
 
+        // Copy/constant propagation belongs in SSA, where one definition dominates all uses and phis
+        // make joins explicit, so forwarding a value is an unconditional global substitution.
+        SsaSimplifier.Run(this);
+
         SsaForm.Remove(this);
 
-        // Now out of SSA: inline/simplify the copies SSA removal introduced, then drop dead locals.
+        // Now out of SSA: clean up the per-edge copies that phi removal introduced (a local can have
+        // several definitions merging at a join here, so this pass propagates conservatively), then
+        // drop dead locals.
         Simplifier.Simplify(this);
         LocalVariables.RemoveUnused(this);
     }

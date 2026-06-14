@@ -5,6 +5,17 @@ using Cpp2IL.Core.Model.Contexts;
 
 namespace Cpp2IL.Core.Analysis;
 
+/// <summary>
+/// Post-SSA copy/constant cleanup. The bulk of copy and constant propagation is done earlier, in SSA,
+/// by <see cref="SsaSimplifier"/>; this pass mops up the copies that <em>destroying</em> SSA leaves
+/// behind - each phi is lowered to a <c>Move</c> on every incoming edge, so the phi's result becomes a
+/// single local with one definition per predecessor.
+///
+/// Those multiple definitions mean a value is no longer single-assignment: at the join the definitions
+/// merge, and which one reaches a use is path-dependent. So unlike <see cref="SsaSimplifier"/>, this
+/// pass cannot blindly forward a definition - it walks the CFG and refuses to carry a multiply-defined
+/// local's value across the join its other definitions merge at (where the phi used to be).
+/// </summary>
 public static class Simplifier
 {
     public static void Simplify(MethodAnalysisContext method)
@@ -28,6 +39,7 @@ public static class Simplifier
     private static bool InlineConstantsSinglePass(ISILControlFlowGraph graph)
     {
         var changed = false;
+        var definitionCounts = CountDefinitions(graph);
 
         var visited = new HashSet<Block>();
         var queue = new Queue<Block>();
@@ -51,8 +63,17 @@ public static class Simplifier
                         // This can't be inlined into memory operand
                         if (usedByMemory) continue;
 
+                        // A local with several definitions is not in SSA form, so its value at a join
+                        // depends on the path taken; don't carry this definition across that join.
+                        var stopAtJoins = definitionCounts.TryGetValue(local, out var defs) && defs > 1;
+
                         // Replace local
-                        ReplaceLocalsUntilReassignment(block, i + 1, local, instruction.Operands[1]);
+                        ReplaceLocalsUntilReassignment(block, i + 1, local, instruction.Operands[1], stopAtJoins);
+
+                        // Only drop the defining move once the local has no remaining uses; if the
+                        // replacement stopped at a join, the local is still live past it so the move stays.
+                        if (IsLocalUsedAfterInstruction(block, i + 1, local, out _))
+                            continue;
 
                         // Change that move to nop
                         instruction.OpCode = OpCode.Nop;
@@ -76,6 +97,7 @@ public static class Simplifier
     private static void InlineLocals(MethodAnalysisContext method)
     {
         var graph = method.ControlFlowGraph;
+        var definitionCounts = CountDefinitions(graph!);
 
         var visited = new HashSet<Block>();
         var queue = new Queue<Block>();
@@ -94,8 +116,17 @@ public static class Simplifier
                 // If it's move and it moves local to local, replace and remove it
                 if (instruction.OpCode == OpCode.Move && instruction.Operands[0] is LocalVariable local && instruction.Operands[1] is LocalVariable source)
                 {
+                    // A local with several definitions is not in SSA form, so its value at a join
+                    // depends on the path taken; don't carry this definition across that join.
+                    var stopAtJoins = definitionCounts.TryGetValue(local, out var defs) && defs > 1;
+
                     // Replace local with source
-                    ReplaceLocalsUntilReassignment(block, i + 1, local, source);
+                    ReplaceLocalsUntilReassignment(block, i + 1, local, source, stopAtJoins);
+
+                    // If the replacement stopped at a join merging another definition, the local is
+                    // still live there - keep its defining move rather than dropping the value on this path.
+                    if (IsLocalUsedAfterInstruction(block, i + 1, local, out _))
+                        continue;
 
                     if (!method.ParameterLocals.Contains(local))
                         method.Locals.Remove(local);
@@ -114,7 +145,22 @@ public static class Simplifier
         }
     }
 
-    private static void ReplaceLocalsUntilReassignment(Block block, int startIndex, LocalVariable local, object replacement)
+    // Counts how many instructions define each local. A local with more than one definition is not in
+    // SSA form: at a control-flow join its value depends on which predecessor was taken, so none of its
+    // definitions may be propagated across that join - a phi would be needed there instead.
+    private static Dictionary<LocalVariable, int> CountDefinitions(ISILControlFlowGraph graph)
+    {
+        var counts = new Dictionary<LocalVariable, int>();
+
+        foreach (var block in graph.Blocks)
+        foreach (var instruction in block.Instructions)
+            if (instruction.Destination is LocalVariable local)
+                counts[local] = counts.TryGetValue(local, out var count) ? count + 1 : 1;
+
+        return counts;
+    }
+
+    private static void ReplaceLocalsUntilReassignment(Block block, int startIndex, LocalVariable local, object replacement, bool stopAtJoins)
     {
         var visited = new HashSet<(Block, int)>();
 
@@ -160,6 +206,8 @@ public static class Simplifier
 
                         if (memory.Index is LocalVariable indexLocal && indexLocal == local)
                             memory.Index = replacement;
+                        
+                        instruction.Operands[j] = memory;
                     }
                 }
             }
@@ -167,6 +215,11 @@ public static class Simplifier
             // Process successors
             foreach (var successor in currentBlock.Successors)
             {
+                // A join merges this local's other definitions, so for a non-SSA (multiply-defined)
+                // local the replacement must not flow past it - the value there is path-dependent.
+                if (stopAtJoins && successor.Predecessors.Count > 1)
+                    continue;
+
                 ProcessBlock(successor, 0);
             }
         }
