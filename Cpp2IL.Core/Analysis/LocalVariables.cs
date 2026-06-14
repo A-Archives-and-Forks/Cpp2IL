@@ -412,9 +412,6 @@ public static class LocalVariables
 
     private static void PropagateFromParameters(MethodAnalysisContext method)
     {
-        if (method.Parameters.Count == 0)
-            return;
-
         // 'this'
         if (!method.IsStatic)
         {
@@ -422,6 +419,9 @@ public static class LocalVariables
             if (thisLocal != null)
                 thisLocal.Type = method.DeclaringType;
         }
+
+        if (method.Parameters.Count == 0)
+            return;
 
         // Normal params
         var paramIndex = 0;
