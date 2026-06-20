@@ -304,9 +304,8 @@ public static class IlGenerator
                 }
 
                 // Load normal params
-                var callParams = instruction.Operands
-                    .Skip(thisParamIndex + (targetMethod.IsStatic ? 0 : -1))
-                    .Take(instruction.Operands.Count - 1 - thisParamIndex);
+                var callParamIndex = instruction.OpCode == OpCode.Call ? (targetMethod.IsStatic ? 2 : 3) : (targetMethod.IsStatic ? 1 : 2);
+                var callParams = instruction.Operands.Skip(callParamIndex);
                 foreach (var param in callParams)
                     LoadOperand(param, method, locals, writeLine, stringCtor);
 
@@ -501,7 +500,7 @@ public static class IlGenerator
                     break;
                 }
                 instructions.Add(CilOpCodes.Ldstr, "Unmanaged memory load: " + operand.ToString());
-                instructions.Add(CilOpCodes.Newobj, importer.ImportMethod(stringCtor));
+                instructions.Add(CilOpCodes.Call, importer.ImportMethod(writeLine));
                 break;
             case RuntimeMethodInfoAnalysisContext:
                 //Not fully implemented, these basically shouldn't actually ever exist in the final IL.

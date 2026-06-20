@@ -250,7 +250,19 @@ public class NewArmV8InstructionSet : Cpp2IlInstructionSet
                 Add(address, OpCode.Move, dest2, mem2);
                 break;
             case Arm64Mnemonic.BL:
-                AddCall(context, GetReturnRegisterForContext(context), address, instruction.BranchTarget);
+                if (context.AppContext.MethodsByAddress.TryGetValue(instruction.BranchTarget, out var possibleMethods))
+                {
+                    if (possibleMethods.Count == 1)
+                        AddCall(context, GetReturnRegisterForContext(possibleMethods[0]), address, instruction.BranchTarget);
+                    else
+                        // TODO: Properly fix this case where branch address is potentially more than 1 method
+                        AddCall(context, GetReturnRegisterForContext(context), address, instruction.BranchTarget);
+                }
+                else
+                {
+                    // TODO: properly handle unmanaged/API function
+                    AddCall(context, GetReturnRegisterForContext(context), address, instruction.BranchTarget);
+                }
                 break;
             case Arm64Mnemonic.RET:
                 var returnRegister = GetReturnRegisterForContext(context);
