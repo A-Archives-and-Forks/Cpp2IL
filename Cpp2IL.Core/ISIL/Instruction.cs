@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Cpp2IL.Core.Graphs;
 using Cpp2IL.Core.Model.Contexts;
@@ -125,6 +126,9 @@ public class Instruction(int index, OpCode opcode, params object[] operands)
         return operand switch
         {
             string text => $"\"{text}\"",
+            // 'f'/'d' suffixes keep a reinterpreted float literal from reading as a plain integer.
+            float f => $"{f.ToString(CultureInfo.InvariantCulture)}f",
+            double d => $"{d.ToString(CultureInfo.InvariantCulture)}d",
             MethodAnalysisContext method => $"{method.DeclaringType!.Name}.{method.Name}",
             RuntimeMethodInfoAnalysisContext methodInfo => $"methodof({methodInfo.RepresentedMethod.FullName})",
             TypeAnalysisContext type => $"typeof({type.FullName})",

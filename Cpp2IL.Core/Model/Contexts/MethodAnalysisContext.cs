@@ -367,6 +367,10 @@ public class MethodAnalysisContext : HasGenericParameters, IMethodInfoProvider
         // several definitions merging at a join here, so this pass propagates conservatively), then
         // drop dead locals.
         Simplifier.Simplify(this);
+
+        // Fix float literals
+        FloatLiteralRecovery.Run(this);
+
         LocalVariables.RemoveUnused(this);
     }
 
